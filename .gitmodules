@@ -1,0 +1,3 @@
+[submodule "TinyVLA"]
+	path = TinyVLA
+	url = https://github.com/liyaxuanliyaxuan/TinyVLA.git

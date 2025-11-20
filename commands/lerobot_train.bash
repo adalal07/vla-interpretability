@@ -14,11 +14,30 @@ lerobot-train \
   --policy.repo_id=adalal/smolvla-libero-64 \
   --policy.load_vlm_weights=true \
   --dataset.repo_id=HuggingFaceVLA/libero \
-  --output_dir=./outputs/smolvla-libero-64 \
+  --env.type=libero \
+  --env.task=libero_10 \
+  --output_dir=./outputs/smolvla-libero-64-2 \
   --steps=100000 \
   --batch_size=64 \
   --eval.batch_size=1 \
   --eval.n_episodes=1 \
   --eval_freq=1000 \
   --wandb.enable=true
+
+
+lerobot-train \
+  --policy.type=smolvla \
+  --policy.repo_id=adalal/smolvla-libero-64 \
+  --policy.load_vlm_weights=true \
+  --dataset.repo_id=HuggingFaceVLA/libero \
+  --env.type=libero \
+  --env.task=libero_10 \
+  --output_dir=./outputs/smolvla-libero-64-2 \
+  --steps=100000 \
+  --batch_size=64 \
+  --eval.batch_size=1 \
+  --eval.n_episodes=1 \
+  --eval_freq=1000 \
+  --wandb.enable=true \
+  --wandb.project=vla-interpretability
 

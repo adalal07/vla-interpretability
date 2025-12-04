@@ -58,8 +58,6 @@ class EvalConfig:
     use_async_envs: bool = False
     # Optional label for experimental condition (e.g., "baseline", "slow_steering")
     condition_label: str | None = None
-    # Enable CSV export of per-episode metrics for analysis
-    export_csv: bool = True
 
     def __post_init__(self) -> None:
         if self.batch_size > self.n_episodes:

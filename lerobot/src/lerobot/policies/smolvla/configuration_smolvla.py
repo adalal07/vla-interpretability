@@ -20,6 +20,7 @@ from lerobot.optim.optimizers import AdamWConfig
 from lerobot.optim.schedulers import (
     CosineDecayWithWarmupSchedulerConfig,
 )
+from lerobot.policies.rtc.configuration_rtc import RTCConfig
 from lerobot.utils.constants import OBS_IMAGES
 
 
@@ -107,6 +108,9 @@ class SmolVLAConfig(PreTrainedConfig):
     auto_patch_k: int = 20  # Number of nearest neighbor value vectors to patch
     auto_patch_alpha: float = 5.0  # Alpha value to set for patched activations
     auto_patch_top_k_tokens: int = 5  # Top-k tokens for semantic embedding computation
+
+    # Real-Time Chunking (RTC) configuration
+    rtc_config: RTCConfig | None = None
 
     def __post_init__(self):
         super().__post_init__()

@@ -72,7 +72,7 @@ from tqdm import trange
 
 from lerobot.configs import parser
 from lerobot.configs.eval import EvalPipelineConfig
-from lerobot.envs.factory import make_env
+from lerobot.envs.factory import make_env, make_env_pre_post_processors
 from lerobot.envs.utils import (
     add_envs_task,
     check_env_attributes_and_types,
@@ -83,6 +83,7 @@ from lerobot.policies.factory import make_policy, make_pre_post_processors
 from lerobot.policies.pretrained import PreTrainedPolicy
 from lerobot.processor import PolicyAction, PolicyProcessorPipeline
 from lerobot.utils.constants import ACTION, DONE, OBS_STR, REWARD
+from lerobot.utils.import_utils import register_third_party_plugins
 from lerobot.utils.io_utils import write_video
 from lerobot.utils.random_utils import set_seed
 from lerobot.utils.utils import (
@@ -95,6 +96,8 @@ from lerobot.utils.utils import (
 def rollout(
     env: gym.vector.VectorEnv,
     policy: PreTrainedPolicy,
+    env_preprocessor: PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
+    env_postprocessor: PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
     preprocessor: PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
     postprocessor: PolicyProcessorPipeline[PolicyAction, PolicyAction],
     seeds: list[int] | None = None,
@@ -170,10 +173,18 @@ def rollout(
         # Infer "task" from attributes of environments.
         # TODO: works with SyncVectorEnv but not AsyncVectorEnv
         observation = add_envs_task(env, observation)
+
+        # Apply environment-specific preprocessing (e.g., LiberoProcessorStep for LIBERO)
+        observation = env_preprocessor(observation)
+
         observation = preprocessor(observation)
         with torch.inference_mode():
             action = policy.select_action(observation)
         action = postprocessor(action)
+
+        action_transition = {"action": action}
+        action_transition = env_postprocessor(action_transition)
+        action = action_transition["action"]
 
         # Convert to CPU / numpy.
         action_numpy: np.ndarray = action.to("cpu").numpy()
@@ -270,6 +281,8 @@ def rollout(
 def eval_policy(
     env: gym.vector.VectorEnv,
     policy: PreTrainedPolicy,
+    env_preprocessor: PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
+    env_postprocessor: PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
     preprocessor: PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
     postprocessor: PolicyProcessorPipeline[PolicyAction, PolicyAction],
     n_episodes: int,
@@ -357,6 +370,8 @@ def eval_policy(
         rollout_data = rollout(
             env=env,
             policy=policy,
+            env_preprocessor=env_preprocessor,
+            env_postprocessor=env_postprocessor,
             preprocessor=preprocessor,
             postprocessor=postprocessor,
             seeds=list(seeds) if seeds else None,
@@ -384,31 +399,25 @@ def eval_policy(
         batch_episode_lengths = (done_indices + 1).tolist()
         episode_lengths.extend(batch_episode_lengths)
         # Velocity statistics over the episode (with proper masking)
-        # For min: set masked positions to +inf, then take min
         velocity_for_min = rollout_data["velocity"].clone()
-        velocity_for_min[mask == 0] = float('inf')
+        velocity_for_min[mask == 0] = float("inf")
         batch_min_velocities = velocity_for_min.min(dim=1)[0]
         min_velocities.extend(batch_min_velocities.tolist())
-        # For avg: sum valid values and divide by count of valid steps
         batch_avg_velocities = (rollout_data["velocity"] * mask).sum(dim=1) / mask.sum(dim=1).float()
         avg_velocities.extend(batch_avg_velocities.tolist())
-        # For max: set masked positions to -inf, then take max
         velocity_for_max = rollout_data["velocity"].clone()
-        velocity_for_max[mask == 0] = float('-inf')
+        velocity_for_max[mask == 0] = float("-inf")
         batch_max_velocities = velocity_for_max.max(dim=1)[0]
         max_velocities.extend(batch_max_velocities.tolist())
         # End effector height statistics over the episode (with proper masking)
-        # For min: set masked positions to +inf, then take min
         height_for_min = rollout_data["eef_height"].clone()
-        height_for_min[mask == 0] = float('inf')
+        height_for_min[mask == 0] = float("inf")
         batch_min_heights = height_for_min.min(dim=1)[0]
         min_heights.extend(batch_min_heights.tolist())
-        # For avg: sum valid values and divide by count of valid steps
         batch_avg_heights = (rollout_data["eef_height"] * mask).sum(dim=1) / mask.sum(dim=1).float()
         avg_heights.extend(batch_avg_heights.tolist())
-        # For max: set masked positions to -inf, then take max
         height_for_max = rollout_data["eef_height"].clone()
-        height_for_max[mask == 0] = float('-inf')
+        height_for_max[mask == 0] = float("-inf")
         batch_max_heights = height_for_max.max(dim=1)[0]
         max_heights.extend(batch_max_heights.tolist())
         if seeds:
@@ -483,7 +492,19 @@ def eval_policy(
                 "avg_eef_height": avg_height,
                 "max_eef_height": max_height,
             }
-            for i, (sum_reward, max_reward, success, seed, episode_length, min_velocity, avg_velocity, max_velocity, min_height, avg_height, max_height) in enumerate(
+            for i, (
+                sum_reward,
+                max_reward,
+                success,
+                seed,
+                episode_length,
+                min_velocity,
+                avg_velocity,
+                max_velocity,
+                min_height,
+                avg_height,
+                max_height,
+            ) in enumerate(
                 zip(
                     sum_rewards[:n_episodes],
                     max_rewards[:n_episodes],
@@ -571,30 +592,20 @@ def _compile_episode_data(
 
 
 def export_per_episode_csv(info: dict, output_dir: Path, condition_label: str | None = None) -> None:
-    """Export per-episode metrics to CSV for easy analysis.
-
-    Args:
-        info: The evaluation info dict containing per_episode and per_task data
-        output_dir: Directory to save CSV file
-        condition_label: Optional condition label to add as a column
-    """
+    """Export per-episode metrics to CSV for easy analysis."""
     csv_path = output_dir / "per_episode_metrics.csv"
 
     # Handle both single-env and multi-task formats
     if "per_episode" in info:
-        # Single environment format (from eval_policy)
         rows = info["per_episode"]
     elif "per_task" in info:
-        # Multi-task format (from eval_policy_all)
         rows = []
         for task_info in info["per_task"]:
             task_group = task_info["task_group"]
             task_id = task_info["task_id"]
             metrics = task_info["metrics"]
-
-            # Metrics contain lists of per-episode values
-            n_episodes = len(metrics["sum_rewards"])
-            for i in range(n_episodes):
+            n_eps = len(metrics["sum_rewards"])
+            for i in range(n_eps):
                 row = {
                     "task_group": task_group,
                     "task_id": task_id,
@@ -603,17 +614,14 @@ def export_per_episode_csv(info: dict, output_dir: Path, condition_label: str | 
                     "max_reward": metrics["max_rewards"][i],
                     "success": metrics["successes"][i],
                 }
-                # Add episode_length if available
                 if "episode_lengths" in metrics:
                     row["episode_length"] = metrics["episode_lengths"][i]
-                # Add velocity metrics if available
                 if "min_velocities" in metrics:
                     row["min_velocity"] = metrics["min_velocities"][i]
                 if "avg_velocities" in metrics:
                     row["avg_velocity"] = metrics["avg_velocities"][i]
                 if "max_velocities" in metrics:
                     row["max_velocity"] = metrics["max_velocities"][i]
-                # Add EEF height metrics if available
                 if "min_eef_heights" in metrics:
                     row["min_eef_height"] = metrics["min_eef_heights"][i]
                 if "avg_eef_heights" in metrics:
@@ -631,12 +639,10 @@ def export_per_episode_csv(info: dict, output_dir: Path, condition_label: str | 
         logging.warning("No episode data to export to CSV")
         return
 
-    # Add condition label to rows if provided and not already in dict
     if condition_label and "condition" not in rows[0]:
         for row in rows:
             row["condition"] = condition_label
 
-    # Write CSV
     fieldnames = list(rows[0].keys())
     with open(csv_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -683,10 +689,16 @@ def eval_main(cfg: EvalPipelineConfig):
         pretrained_path=cfg.policy.pretrained_path,
         preprocessor_overrides=preprocessor_overrides,
     )
+
+    # Create environment-specific preprocessor and postprocessor (e.g., for LIBERO environments)
+    env_preprocessor, env_postprocessor = make_env_pre_post_processors(env_cfg=cfg.env, policy_cfg=cfg.policy)
+
     with torch.no_grad(), torch.autocast(device_type=device.type) if cfg.policy.use_amp else nullcontext():
         info = eval_policy_all(
             envs=envs,
             policy=policy,
+            env_preprocessor=env_preprocessor,
+            env_postprocessor=env_postprocessor,
             preprocessor=preprocessor,
             postprocessor=postprocessor,
             n_episodes=cfg.eval.n_episodes,
@@ -713,9 +725,7 @@ def eval_main(cfg: EvalPipelineConfig):
     with open(Path(cfg.output_dir) / "eval_info.json", "w") as f:
         json.dump(info, f, indent=2)
 
-    # Export CSV if enabled
-    if cfg.eval.export_csv:
-        export_per_episode_csv(info, Path(cfg.output_dir), cfg.eval.condition_label)
+    export_per_episode_csv(info, Path(cfg.output_dir), cfg.eval.condition_label)
 
     logging.info("End of eval")
 
@@ -735,13 +745,27 @@ class TaskMetrics(TypedDict):
     video_paths: list[str]
 
 
-ACC_KEYS = ("sum_rewards", "max_rewards", "successes", "episode_lengths", "min_velocities", "avg_velocities", "max_velocities", "min_eef_heights", "avg_eef_heights", "max_eef_heights", "video_paths")
+ACC_KEYS = (
+    "sum_rewards",
+    "max_rewards",
+    "successes",
+    "episode_lengths",
+    "min_velocities",
+    "avg_velocities",
+    "max_velocities",
+    "min_eef_heights",
+    "avg_eef_heights",
+    "max_eef_heights",
+    "video_paths",
+)
 
 
 def eval_one(
     env: gym.vector.VectorEnv,
     *,
     policy: PreTrainedPolicy,
+    env_preprocessor: PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
+    env_postprocessor: PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
     preprocessor: PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
     postprocessor: PolicyProcessorPipeline[PolicyAction, PolicyAction],
     n_episodes: int,
@@ -757,6 +781,8 @@ def eval_one(
     task_result = eval_policy(
         env=env,
         policy=policy,
+        env_preprocessor=env_preprocessor,
+        env_postprocessor=env_postprocessor,
         preprocessor=preprocessor,
         postprocessor=postprocessor,
         n_episodes=n_episodes,
@@ -788,6 +814,8 @@ def run_one(
     env,
     *,
     policy,
+    env_preprocessor,
+    env_postprocessor,
     preprocessor,
     postprocessor,
     n_episodes: int,
@@ -810,6 +838,8 @@ def run_one(
     metrics = eval_one(
         env,
         policy=policy,
+        env_preprocessor=env_preprocessor,
+        env_postprocessor=env_postprocessor,
         preprocessor=preprocessor,
         postprocessor=postprocessor,
         n_episodes=n_episodes,
@@ -827,6 +857,8 @@ def run_one(
 def eval_policy_all(
     envs: dict[str, dict[int, gym.vector.VectorEnv]],
     policy,
+    env_preprocessor: PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
+    env_postprocessor: PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
     preprocessor: PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
     postprocessor: PolicyProcessorPipeline[PolicyAction, PolicyAction],
     n_episodes: int,
@@ -882,6 +914,8 @@ def eval_policy_all(
     task_runner = partial(
         run_one,
         policy=policy,
+        env_preprocessor=env_preprocessor,
+        env_postprocessor=env_postprocessor,
         preprocessor=preprocessor,
         postprocessor=postprocessor,
         n_episodes=n_episodes,
@@ -948,6 +982,7 @@ def eval_policy_all(
 
 def main():
     init_logging()
+    register_third_party_plugins()
     eval_main()
 
 

@@ -54,12 +54,15 @@ policy = SmolVLAPolicy.from_pretrained("lerobot/smolvla_base")
 
 import math
 from collections import deque
+from typing import TypedDict
 
 import torch
 import torch.nn.functional as F  # noqa: N812
 from torch import Tensor, nn
+from typing_extensions import Unpack
 
 from lerobot.policies.pretrained import PreTrainedPolicy
+from lerobot.policies.rtc.modeling_rtc import RTCProcessor
 from lerobot.policies.smolvla.configuration_smolvla import SmolVLAConfig
 from lerobot.policies.smolvla.smolvlm_with_expert import SmolVLMWithExpertModel
 from lerobot.policies.utils import (
@@ -67,6 +70,12 @@ from lerobot.policies.utils import (
 )
 from lerobot.utils.constants import ACTION, OBS_LANGUAGE_ATTENTION_MASK, OBS_LANGUAGE_TOKENS, OBS_STATE
 from lerobot.utils.utils import get_safe_dtype
+
+
+class ActionSelectKwargs(TypedDict, total=False):
+    inference_delay: int | None
+    prev_chunk_left_over: Tensor | None
+    execution_horizon: int | None
 
 
 # ============ ACTIVATION PATCHING CONFIG ============
@@ -78,63 +87,17 @@ ACTIVATION_PATCHES = {
     "expert": [],
 }
 
-# ACTIVATION_PATCHES = {
-#     "vlm": [
-#         {'layer_idx': 10, 'vector_indices': [1480], 'alpha': 16.0},
-#         {'layer_idx': 4, 'vector_indices': [2082], 'alpha': 16.0},
-#         {'layer_idx': 5, 'vector_indices': [196], 'alpha': 16.0},
-#         # {'layer_idx': 13, 'vector_indices': [2077], 'alpha': 16.0},
-#     ],
-#     "expert": [],
-# }
-
-# ACTIVATION_PATCHES = {
-#     "vlm": [
-#         {'layer_idx': 2, 'vector_indices': [2374], 'alpha': 5.0},
-#         {'layer_idx': 4, 'vector_indices': [613], 'alpha': 5.0},
-#         {'layer_idx': 11, 'vector_indices': [1903, 798], 'alpha': 5.0},
-#         {'layer_idx': 13, 'vector_indices': [2077], 'alpha': 5.0},
-#     ],
-#     "expert": [],                                                                                                                                                       }
-
-# ACTIVATION_PATCHES = {
-#     "vlm": [
-#         {'layer_idx': 0, 'vector_indices': [451, 563, 661], 'alpha': 5.0},
-#         {'layer_idx': 1, 'vector_indices': [2503, 121], 'alpha': 5.0},
-#         {'layer_idx': 2, 'vector_indices': [300, 1062, 2532], 'alpha': 5.0},
-#         {'layer_idx': 3, 'vector_indices': [283], 'alpha': 5.0},
-#         {'layer_idx': 5, 'vector_indices': [1171, 566, 1450], 'alpha': 5.0},
-#         {'layer_idx': 6, 'vector_indices': [838], 'alpha': 5.0},
-#         {'layer_idx': 8, 'vector_indices': [1387, 599, 1893], 'alpha': 5.0},
-#         {'layer_idx': 11, 'vector_indices': [1506], 'alpha': 5.0},
-#         {'layer_idx': 12, 'vector_indices': [2405], 'alpha': 5.0},
-#         {'layer_idx': 14, 'vector_indices': [1163, 1811], 'alpha': 5.0},
-#     ],
-#     "expert": [],
-# }
-
 
 def _create_ffn_patch_hook(vector_indices, alpha):
-    """Creates a forward_pre_hook for down_proj that patches intermediate activations.
+    """Create a hook for down_proj that patches intermediate activations."""
 
-    The hook intercepts f_theta(x) which is the input to down_proj, where:
-    f_theta(x) = activation(gate_proj(x)) * up_proj(x)
-
-    Args:
-        vector_indices: List of indices in the intermediate dimension to patch
-        alpha: Scalar value to replace the activations with
-
-    Returns:
-        Hook function that modifies the input tensor
-    """
     def hook(module, input):
         # input[0] has shape [batch, seq_len, intermediate_size]
-        # This is f_theta(x), the post-gating activations before down_proj
         modified = input[0].clone()
         for idx in vector_indices:
             modified[..., idx] = alpha
-            # modified[..., idx] = torch.abs(modified[..., idx] * alpha)
         return (modified,)
+
     return hook
 
 
@@ -283,85 +246,48 @@ def aloha_gripper_from_angular_inv(value):
 
 
 def extract_vlm_value_vectors(model):
-    """Extract all value vectors from VLM FFN layers.
-
-    Returns: list of (layer_idx, vector_idx, value_vector_tensor)
-    """
+    """Extract all value vectors from VLM FFN layers."""
     layers = model.model.vlm_with_expert.get_vlm_model().text_model.layers
     value_vectors = []
-
     for layer_idx, layer in enumerate(layers):
-        # down_proj.weight: [hidden_size, intermediate_size]
-        # Each column is a value vector
         down_proj_weight = layer.mlp.down_proj.weight.data
-
         for vector_idx in range(down_proj_weight.shape[1]):
             value_vector = down_proj_weight[:, vector_idx]
             value_vectors.append((layer_idx, vector_idx, value_vector))
-
     return value_vectors
 
 
-def compute_semantic_embeddings(
-    value_vectors, embeddings, lm_head, final_norm, top_k=5
-):
-    """Convert value vectors to semantic embeddings via unembedding.
-
-    For each value vector v:
-      1. logits = lm_head(final_norm(v))
-      2. top_tokens = topk(logits, k)
-      3. semantic_emb = sum_i softmax(logits[i]) * embeddings[i]
-
-    Returns:
-        semantic_embeddings: tensor of shape [num_vectors, hidden_dim]
-        top_tokens: tensor of shape [num_vectors, top_k] - token IDs
-        top_probs: tensor of shape [num_vectors, top_k] - probabilities
-    """
+def compute_semantic_embeddings(value_vectors, embeddings, lm_head, final_norm, top_k=5):
+    """Convert value vectors to semantic embeddings via unembedding."""
     vectors = torch.stack([v for _, _, v in value_vectors])
-
-    # Project through unembedding
     normed = final_norm(vectors)
     logits = lm_head(normed)
-
-    # Get top-k tokens and their probabilities
     top_logits, top_indices = torch.topk(logits, k=top_k, dim=1)
     top_probs = F.softmax(top_logits, dim=1)
 
-    # Semantic embedding = weighted average of top token embeddings
     semantic_embs = []
     for i in range(len(vectors)):
-        token_embs = embeddings[top_indices[i]]  # [top_k, hidden_dim]
-        weights = top_probs[i]  # [top_k]
+        token_embs = embeddings[top_indices[i]]
+        weights = top_probs[i]
         semantic_emb = (weights[:, None] * token_embs).sum(dim=0)
         semantic_embs.append(semantic_emb)
 
     return torch.stack(semantic_embs), top_indices, top_probs
 
 
-def find_nearest_neighbors(
-    target_word, semantic_embeddings, value_vectors, embeddings, tokenizer, k=20
-):
-    """Find k value vectors with semantic embeddings closest to target word.
-
-    Returns: list of (layer_idx, vector_idx, similarity)
-    """
-    # Get target embedding
+def find_nearest_neighbors(target_word, semantic_embeddings, value_vectors, embeddings, tokenizer, k=20):
+    """Find k value vectors with semantic embeddings closest to target word."""
     target_token_id = tokenizer.encode(target_word, add_special_tokens=False)[0]
     target_emb = embeddings[target_token_id]
-
-    # Cosine similarity
     semantic_norm = F.normalize(semantic_embeddings, dim=1)
     target_norm = F.normalize(target_emb.unsqueeze(0), dim=1)
     similarities = (semantic_norm @ target_norm.T).squeeze()
-
-    # Top-k
     top_sims, top_indices = torch.topk(similarities, k=min(k, len(similarities)))
 
     results = []
     for sim, idx in zip(top_sims, top_indices):
         layer_idx, vector_idx, _ = value_vectors[idx]
         results.append((layer_idx, vector_idx, sim.item()))
-
     return results
 
 
@@ -369,16 +295,11 @@ def generate_patches(neighbors, alpha):
     """Group neighbors by layer and generate patch config."""
     patches = {}
     for layer_idx, vector_idx, _ in neighbors:
-        if layer_idx not in patches:
-            patches[layer_idx] = []
-        patches[layer_idx].append(vector_idx)
-
-    patch_list = [
+        patches.setdefault(layer_idx, []).append(vector_idx)
+    return [
         {"layer_idx": layer_idx, "vector_indices": indices, "alpha": alpha}
         for layer_idx, indices in sorted(patches.items())
     ]
-
-    return patch_list
 
 
 class SmolVLAPolicy(PreTrainedPolicy):
@@ -400,8 +321,8 @@ class SmolVLAPolicy(PreTrainedPolicy):
         super().__init__(config)
         config.validate_features()
         self.config = config
-
-        self.model = VLAFlowMatching(config)
+        self.init_rtc_processor()
+        self.model = VLAFlowMatching(config, rtc_processor=self.rtc_processor)
         self.reset()
 
         # Compute activation patches dynamically if auto_patch_target is set
@@ -409,20 +330,19 @@ class SmolVLAPolicy(PreTrainedPolicy):
             print(f"Computing activation patches for target: '{config.auto_patch_target}'")
             self._activation_patches = self._compute_auto_patches()
         else:
-            # Use hardcoded patches from global ACTIVATION_PATCHES
             self._activation_patches = ACTIVATION_PATCHES
 
         self._register_activation_patches()
 
+    def reset(self):
+        """This should be called whenever the environment is reset."""
+        self._queues = {
+            ACTION: deque(maxlen=self.config.n_action_steps),
+        }
+
     def _compute_auto_patches(self):
-        """Compute activation patches automatically based on semantic value vectors.
-
-        Returns:
-            dict with "vlm" and "expert" patch lists
-        """
+        """Compute activation patches automatically based on semantic value vectors."""
         config = self.config
-
-        # Get components for semantic analysis
         vlm = self.model.vlm_with_expert.vlm
         vlm_text = self.model.vlm_with_expert.get_vlm_model().text_model
         embeddings = vlm_text.embed_tokens.weight.data.to(config.device)
@@ -430,7 +350,7 @@ class SmolVLAPolicy(PreTrainedPolicy):
         final_norm = vlm_text.norm
         tokenizer = self.model.vlm_with_expert.processor.tokenizer
 
-        print(f"Extracting value vectors...")
+        print("Extracting value vectors...")
         value_vectors = extract_vlm_value_vectors(self)
         print(f"Found {len(value_vectors)} value vectors across {len(set(v[0] for v in value_vectors))} layers")
 
@@ -441,83 +361,74 @@ class SmolVLAPolicy(PreTrainedPolicy):
 
         print(f"Finding k={config.auto_patch_k} nearest neighbors to '{config.auto_patch_target}'...")
         neighbors = find_nearest_neighbors(
-            config.auto_patch_target, semantic_embeddings, value_vectors, embeddings, tokenizer, k=config.auto_patch_k
+            config.auto_patch_target,
+            semantic_embeddings,
+            value_vectors,
+            embeddings,
+            tokenizer,
+            k=config.auto_patch_k,
         )
 
-        # Print top results
         print(f"\nTop value vectors for '{config.auto_patch_target}':")
         for i, (layer_idx, vector_idx, sim) in enumerate(neighbors[:10]):
             print(f"  {i+1}. Layer {layer_idx}, Vector {vector_idx}: similarity={sim:.4f}")
-
-            # Find this value vector's index to get its top tokens
-            vec_idx = next(
-                j
-                for j, (l, v, _) in enumerate(value_vectors)
-                if l == layer_idx and v == vector_idx
-            )
+            vec_idx = next(j for j, (l, v, _) in enumerate(value_vectors) if l == layer_idx and v == vector_idx)
             tokens = top_tokens[vec_idx]
             probs = top_probs[vec_idx]
-
-            print(f"      Top tokens: ", end="")
+            print("      Top tokens: ", end="")
             for tok_id, prob in zip(tokens, probs):
                 tok_str = tokenizer.decode([tok_id.item()])
                 print(f"'{tok_str}'({prob:.2f}) ", end="")
             print()
 
-        # Generate patches
         vlm_patches = generate_patches(neighbors, config.auto_patch_alpha)
-
         print(f"\nGenerated {len(vlm_patches)} VLM layer patches with alpha={config.auto_patch_alpha}")
-
         return {
             "vlm": vlm_patches,
             "expert": [],
         }
 
     def _register_activation_patches(self):
-        """Register FFN activation patches on down_proj layers.
-
-        This method hooks into the down_proj layer of each FFN to intercept and modify
-        the intermediate activations f_theta(x) = activation(gate_proj(x)) * up_proj(x).
-
-        Patches are specified in self._activation_patches dict.
-        """
+        """Register FFN activation patches on down_proj layers."""
         self._patch_hooks = []
 
-        # VLM and Expert transformer layers
         vlm_layers = self.model.vlm_with_expert.get_vlm_model().text_model.layers
         expert_layers = self.model.vlm_with_expert.lm_expert.layers
 
-        # Register hooks for VLM layers
         for patch in self._activation_patches.get("vlm", []):
-            layer_idx = patch["layer_idx"]
-            vector_indices = patch["vector_indices"]
-            alpha = patch["alpha"]
-            hook = vlm_layers[layer_idx].mlp.down_proj.register_forward_pre_hook(
-                _create_ffn_patch_hook(vector_indices, alpha)
+            hook = vlm_layers[patch["layer_idx"]].mlp.down_proj.register_forward_pre_hook(
+                _create_ffn_patch_hook(patch["vector_indices"], patch["alpha"])
             )
             self._patch_hooks.append(hook)
 
-        # Register hooks for Expert layers
         for patch in self._activation_patches.get("expert", []):
-            layer_idx = patch["layer_idx"]
-            vector_indices = patch["vector_indices"]
-            alpha = patch["alpha"]
-            hook = expert_layers[layer_idx].mlp.down_proj.register_forward_pre_hook(
-                _create_ffn_patch_hook(vector_indices, alpha)
+            hook = expert_layers[patch["layer_idx"]].mlp.down_proj.register_forward_pre_hook(
+                _create_ffn_patch_hook(patch["vector_indices"], patch["alpha"])
             )
             self._patch_hooks.append(hook)
 
-    def reset(self):
-        """This should be called whenever the environment is reset."""
-        self._queues = {
-            ACTION: deque(maxlen=self.config.n_action_steps),
-        }
+    def init_rtc_processor(self):
+        """Initialize RTC processor if RTC is enabled in config."""
+        self.rtc_processor = None
+
+        # Lets create processor if the config provided
+        # If RTC is not enabled - we still can track the denoising data
+        if self.config.rtc_config is not None:
+            self.rtc_processor = RTCProcessor(self.config.rtc_config)
+
+            # In case of calling init_rtc_processor after the model is created
+            # We need to set the rtc_processor to the model
+            # During the normal initialization process the model is not created yet
+            model_value = getattr(self, "model", None)
+            if model_value is not None:
+                model_value.rtc_processor = self.rtc_processor
 
     def get_optim_params(self) -> dict:
         return self.parameters()
 
-    def _get_action_chunk(self, batch: dict[str, Tensor], noise: Tensor | None = None) -> Tensor:
+    def _get_action_chunk(
+        self, batch: dict[str, Tensor], noise: Tensor | None = None, **kwargs: Unpack[ActionSelectKwargs]
+    ) -> Tensor:
         # TODO: Check if this for loop is needed.
         # Context: In fact, self.queues contains only ACTION field, and in inference, we don't have action in the batch
         # In the case of offline inference, we have the action in the batch
@@ -532,7 +443,9 @@ class SmolVLAPolicy(PreTrainedPolicy):
         lang_tokens = batch[f"{OBS_LANGUAGE_TOKENS}"]
         lang_masks = batch[f"{OBS_LANGUAGE_ATTENTION_MASK}"]
 
-        actions = self.model.sample_actions(images, img_masks, lang_tokens, lang_masks, state, noise=noise)
+        actions = self.model.sample_actions(
+            images, img_masks, lang_tokens, lang_masks, state, noise=noise, **kwargs
+        )
 
         # Unpad actions
         original_action_dim = self.config.action_feature.shape[0]
@@ -550,30 +463,37 @@ class SmolVLAPolicy(PreTrainedPolicy):
         return batch
 
     @torch.no_grad()
-    def predict_action_chunk(self, batch: dict[str, Tensor], noise: Tensor | None = None) -> Tensor:
+    def predict_action_chunk(
+        self, batch: dict[str, Tensor], noise: Tensor | None = None, **kwargs: Unpack[ActionSelectKwargs]
+    ) -> Tensor:
         self.eval()
 
         batch = self._prepare_batch(batch)
         self._queues = populate_queues(self._queues, batch, exclude_keys=[ACTION])
 
-        actions = self._get_action_chunk(batch, noise)
+        actions = self._get_action_chunk(batch, noise, **kwargs)
         return actions
 
     @torch.no_grad()
-    def select_action(self, batch: dict[str, Tensor], noise: Tensor | None = None) -> Tensor:
+    def select_action(
+        self, batch: dict[str, Tensor], noise: Tensor | None = None, **kwargs: Unpack[ActionSelectKwargs]
+    ) -> Tensor:
         """Select a single action given environment observations.
 
         This method wraps `select_actions` in order to return one action at a time for execution in the
         environment. It works by managing the actions in a queue and only calling `select_actions` when the
         queue is empty.
         """
+
+        assert not self._rtc_enabled(), (
+            "RTC is not supported for select_action, use it with predict_action_chunk"
+        )
+
         self.eval()
         batch = self._prepare_batch(batch)
         self._queues = populate_queues(self._queues, batch, exclude_keys=[ACTION])
 
-        # Action queue logic for n_action_steps > 1. When the action_queue is depleted, populate it by
-        # querying the policy.
-        if len(self._queues[ACTION]) == 0:
+        if self._check_get_actions_condition():
             actions = self._get_action_chunk(batch, noise)
 
             # `self.predict_action_chunk` returns a (batch_size, n_action_steps, action_dim) tensor, but the queue
@@ -581,6 +501,12 @@ class SmolVLAPolicy(PreTrainedPolicy):
             self._queues[ACTION].extend(actions.transpose(0, 1)[: self.config.n_action_steps])
 
         return self._queues[ACTION].popleft()
+
+    def _check_get_actions_condition(self) -> bool:
+        return len(self._queues[ACTION]) == 0
+
+    def _rtc_enabled(self) -> bool:
+        return self.config.rtc_config is not None and self.config.rtc_config.enabled
 
     def forward(self, batch: dict[str, Tensor], noise=None, time=None) -> dict[str, Tensor]:
         """Do a full training forward pass to compute the loss"""
@@ -743,7 +669,7 @@ class VLAFlowMatching(nn.Module):
     └──────────────────────────────┘
     """
 
-    def __init__(self, config: SmolVLAConfig):
+    def __init__(self, config: SmolVLAConfig, rtc_processor: RTCProcessor | None = None):
         super().__init__()
         self.config = config
 
@@ -757,7 +683,6 @@ class VLAFlowMatching(nn.Module):
             num_vlm_layers=self.config.num_vlm_layers,
             self_attn_every_n_layers=self.config.self_attn_every_n_layers,
             expert_width_multiplier=self.config.expert_width_multiplier,
-            device=self.config.device,
         )
         self.state_proj = nn.Linear(
             self.config.max_state_dim, self.vlm_with_expert.config.text_config.hidden_size
@@ -782,6 +707,10 @@ class VLAFlowMatching(nn.Module):
         self.add_image_special_tokens = self.config.add_image_special_tokens
         self.image_end_token = torch.tensor([self.fake_image_token], dtype=torch.long)
         self.prefix_length = self.config.prefix_length
+        self.rtc_processor = rtc_processor
+
+    def _rtc_enabled(self):
+        return self.config.rtc_config is not None and self.config.rtc_config.enabled
 
     def set_requires_grad(self):
         for params in self.state_proj.parameters():
@@ -978,7 +907,16 @@ class VLAFlowMatching(nn.Module):
         losses = F.mse_loss(u_t, v_t, reduction="none")
         return losses
 
-    def sample_actions(self, images, img_masks, lang_tokens, lang_masks, state, noise=None) -> Tensor:
+    def sample_actions(
+        self,
+        images,
+        img_masks,
+        lang_tokens,
+        lang_masks,
+        state,
+        noise=None,
+        **kwargs: Unpack[ActionSelectKwargs],
+    ) -> Tensor:
         """Do a full inference forward and compute the action (batch_size x num_steps x num_motors)"""
         bsize = state.shape[0]
         device = state.device
@@ -1006,17 +944,45 @@ class VLAFlowMatching(nn.Module):
 
         x_t = noise
         time = torch.tensor(1.0, dtype=torch.float32, device=device)
+
         while time >= -dt / 2:
             expanded_time = time.expand(bsize)
-            v_t = self.denoise_step(
-                prefix_pad_masks,
-                past_key_values,
-                x_t,
-                expanded_time,
-            )
+
+            # Define a closure function to properly capture expanded_time
+            # This avoids the lambda expression (E731) and loop variable binding (B023) issues
+            def denoise_step_partial_call(input_x_t, current_timestep=expanded_time):
+                return self.denoise_step(
+                    x_t=input_x_t,
+                    prefix_pad_masks=prefix_pad_masks,
+                    past_key_values=past_key_values,
+                    timestep=current_timestep,
+                )
+
+            if self._rtc_enabled():
+                inference_delay = kwargs.get("inference_delay")
+                prev_chunk_left_over = kwargs.get("prev_chunk_left_over")
+                execution_horizon = kwargs.get("execution_horizon")
+
+                v_t = self.rtc_processor.denoise_step(
+                    x_t=x_t,
+                    prev_chunk_left_over=prev_chunk_left_over,
+                    inference_delay=inference_delay,
+                    time=time,
+                    original_denoise_step_partial=denoise_step_partial_call,
+                    execution_horizon=execution_horizon,
+                )
+            else:
+                v_t = denoise_step_partial_call(x_t)
+
             # Euler step
             x_t += dt * v_t
+
+            # Record x_t and v_t after Euler step (other params are recorded in rtc_processor.denoise_step)
+            if self.rtc_processor is not None and self.rtc_processor.is_debug_enabled():
+                self.rtc_processor.track(time=time, x_t=x_t, v_t=v_t)
+
             time += dt
+
         return x_t
 
     def denoise_step(

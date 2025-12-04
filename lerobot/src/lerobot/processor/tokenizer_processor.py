@@ -128,7 +128,7 @@ class TokenizerProcessorStep(ObservationProcessorStep):
         if isinstance(task, str):
             return [task]
         elif isinstance(task, list) and all(isinstance(t, str) for t in task):
-            return [t for t in task]
+            return task
 
         return None
 

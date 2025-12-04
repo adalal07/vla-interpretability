@@ -146,7 +146,7 @@ def rollout(
     all_successes = []
     all_dones = []
     all_velocities = []  # track end effector velocities
-    max_eef_heights = [float('-inf')] * env.num_envs  # track max end effector height per episode
+    all_eef_heights = []  # track end effector heights at each step
 
     step = 0
     # Keep track of which environments are done.
@@ -210,16 +210,14 @@ def rollout(
         all_dones.append(torch.from_numpy(done))
         all_successes.append(torch.tensor(successes))
 
-        # Compute end effector velocity and track max height (if agent_pos is available)
+        # Compute end effector velocity and track height (if agent_pos is available)
         if "agent_pos" in observation:
             # agent_pos is (batch, state_dim) where first 3 dims are EEF position (x, y, z)
             current_eef_pos = observation["agent_pos"][:, :3]  # (batch, 3)
 
-            # Track max height (z-coordinate is index 2)
+            # Track height (z-coordinate is index 2)
             current_heights = current_eef_pos[:, 2]  # (batch,) - z-coordinate
-            for i in range(env.num_envs):
-                if not done[i]:  # Only update if episode is still active
-                    max_eef_heights[i] = max(max_eef_heights[i], current_heights[i])
+            all_eef_heights.append(torch.from_numpy(current_heights))
 
             if prev_eef_pos is not None:
                 # Velocity = displacement / dt (assuming dt = 1 timestep, approximately 0.05s for most envs)
@@ -234,6 +232,7 @@ def rollout(
         else:
             # No agent_pos available (e.g., pixels-only observation)
             all_velocities.append(torch.zeros(env.num_envs))
+            all_eef_heights.append(torch.zeros(env.num_envs))
 
         step += 1
         running_success_rate = (
@@ -254,7 +253,7 @@ def rollout(
         "success": torch.stack(all_successes, dim=1),
         "done": torch.stack(all_dones, dim=1),
         "velocity": torch.stack(all_velocities, dim=1),  # (batch, sequence) - EEF speed per step
-        "max_eef_height": torch.tensor(max_eef_heights),  # (batch,) - max EEF height per episode
+        "eef_height": torch.stack(all_eef_heights, dim=1),  # (batch, sequence) - EEF height per step
     }
     if return_observations:
         stacked_observations = {}
@@ -314,7 +313,11 @@ def eval_policy(
     all_successes = []
     all_seeds = []
     episode_lengths = []  # track number of steps per episode
+    min_velocities = []  # track minimum end effector velocity per episode
     avg_velocities = []  # track average end effector velocity per episode
+    max_velocities = []  # track maximum end effector velocity per episode
+    min_heights = []  # track minimum end effector height per episode
+    avg_heights = []  # track average end effector height per episode
     max_heights = []  # track maximum end effector height per episode
     threads = []  # for video saving threads
     n_episodes_rendered = 0  # for saving the correct number of videos
@@ -380,12 +383,34 @@ def eval_policy(
         # Episode length = done_index + 1 (convert 0-indexed to step count)
         batch_episode_lengths = (done_indices + 1).tolist()
         episode_lengths.extend(batch_episode_lengths)
-        # Average velocity over the episode
-        batch_avg_velocities = einops.reduce((rollout_data["velocity"] * mask), "b n -> b", "mean")
+        # Velocity statistics over the episode (with proper masking)
+        # For min: set masked positions to +inf, then take min
+        velocity_for_min = rollout_data["velocity"].clone()
+        velocity_for_min[mask == 0] = float('inf')
+        batch_min_velocities = velocity_for_min.min(dim=1)[0]
+        min_velocities.extend(batch_min_velocities.tolist())
+        # For avg: sum valid values and divide by count of valid steps
+        batch_avg_velocities = (rollout_data["velocity"] * mask).sum(dim=1) / mask.sum(dim=1).float()
         avg_velocities.extend(batch_avg_velocities.tolist())
-        # Max end effector height over the episode
-        batch_max_heights = rollout_data["max_eef_height"].tolist()
-        max_heights.extend(batch_max_heights)
+        # For max: set masked positions to -inf, then take max
+        velocity_for_max = rollout_data["velocity"].clone()
+        velocity_for_max[mask == 0] = float('-inf')
+        batch_max_velocities = velocity_for_max.max(dim=1)[0]
+        max_velocities.extend(batch_max_velocities.tolist())
+        # End effector height statistics over the episode (with proper masking)
+        # For min: set masked positions to +inf, then take min
+        height_for_min = rollout_data["eef_height"].clone()
+        height_for_min[mask == 0] = float('inf')
+        batch_min_heights = height_for_min.min(dim=1)[0]
+        min_heights.extend(batch_min_heights.tolist())
+        # For avg: sum valid values and divide by count of valid steps
+        batch_avg_heights = (rollout_data["eef_height"] * mask).sum(dim=1) / mask.sum(dim=1).float()
+        avg_heights.extend(batch_avg_heights.tolist())
+        # For max: set masked positions to -inf, then take max
+        height_for_max = rollout_data["eef_height"].clone()
+        height_for_max[mask == 0] = float('-inf')
+        batch_max_heights = height_for_max.max(dim=1)[0]
+        max_heights.extend(batch_max_heights.tolist())
         if seeds:
             all_seeds.extend(seeds)
         else:
@@ -451,17 +476,25 @@ def eval_policy(
                 "success": success,
                 "seed": seed,
                 "episode_length": episode_length,
+                "min_velocity": min_velocity,
                 "avg_velocity": avg_velocity,
+                "max_velocity": max_velocity,
+                "min_eef_height": min_height,
+                "avg_eef_height": avg_height,
                 "max_eef_height": max_height,
             }
-            for i, (sum_reward, max_reward, success, seed, episode_length, avg_velocity, max_height) in enumerate(
+            for i, (sum_reward, max_reward, success, seed, episode_length, min_velocity, avg_velocity, max_velocity, min_height, avg_height, max_height) in enumerate(
                 zip(
                     sum_rewards[:n_episodes],
                     max_rewards[:n_episodes],
                     all_successes[:n_episodes],
                     all_seeds[:n_episodes],
                     episode_lengths[:n_episodes],
+                    min_velocities[:n_episodes],
                     avg_velocities[:n_episodes],
+                    max_velocities[:n_episodes],
+                    min_heights[:n_episodes],
+                    avg_heights[:n_episodes],
                     max_heights[:n_episodes],
                     strict=True,
                 )
@@ -472,7 +505,11 @@ def eval_policy(
             "avg_max_reward": float(np.nanmean(max_rewards[:n_episodes])),
             "pc_success": float(np.nanmean(all_successes[:n_episodes]) * 100),
             "avg_episode_length": float(np.nanmean(episode_lengths[:n_episodes])),
-            "avg_velocity": float(np.nanmean(avg_velocities[:n_episodes])),
+            "avg_min_velocity": float(np.nanmean(min_velocities[:n_episodes])),
+            "avg_avg_velocity": float(np.nanmean(avg_velocities[:n_episodes])),
+            "avg_max_velocity": float(np.nanmean(max_velocities[:n_episodes])),
+            "avg_min_eef_height": float(np.nanmean(min_heights[:n_episodes])),
+            "avg_avg_eef_height": float(np.nanmean(avg_heights[:n_episodes])),
             "avg_max_eef_height": float(np.nanmean(max_heights[:n_episodes])),
             "eval_s": time.time() - start,
             "eval_ep_s": (time.time() - start) / n_episodes,
@@ -569,10 +606,18 @@ def export_per_episode_csv(info: dict, output_dir: Path, condition_label: str | 
                 # Add episode_length if available
                 if "episode_lengths" in metrics:
                     row["episode_length"] = metrics["episode_lengths"][i]
-                # Add avg_velocity if available
+                # Add velocity metrics if available
+                if "min_velocities" in metrics:
+                    row["min_velocity"] = metrics["min_velocities"][i]
                 if "avg_velocities" in metrics:
                     row["avg_velocity"] = metrics["avg_velocities"][i]
-                # Add max_eef_height if available
+                if "max_velocities" in metrics:
+                    row["max_velocity"] = metrics["max_velocities"][i]
+                # Add EEF height metrics if available
+                if "min_eef_heights" in metrics:
+                    row["min_eef_height"] = metrics["min_eef_heights"][i]
+                if "avg_eef_heights" in metrics:
+                    row["avg_eef_height"] = metrics["avg_eef_heights"][i]
                 if "max_eef_heights" in metrics:
                     row["max_eef_height"] = metrics["max_eef_heights"][i]
                 if condition_label:
@@ -681,12 +726,16 @@ class TaskMetrics(TypedDict):
     max_rewards: list[float]
     successes: list[bool]
     episode_lengths: list[int]
+    min_velocities: list[float]
     avg_velocities: list[float]
+    max_velocities: list[float]
+    min_eef_heights: list[float]
+    avg_eef_heights: list[float]
     max_eef_heights: list[float]
     video_paths: list[str]
 
 
-ACC_KEYS = ("sum_rewards", "max_rewards", "successes", "episode_lengths", "avg_velocities", "max_eef_heights", "video_paths")
+ACC_KEYS = ("sum_rewards", "max_rewards", "successes", "episode_lengths", "min_velocities", "avg_velocities", "max_velocities", "min_eef_heights", "avg_eef_heights", "max_eef_heights", "video_paths")
 
 
 def eval_one(
@@ -723,7 +772,11 @@ def eval_one(
         max_rewards=[ep["max_reward"] for ep in per_episode],
         successes=[ep["success"] for ep in per_episode],
         episode_lengths=[ep["episode_length"] for ep in per_episode],
+        min_velocities=[ep["min_velocity"] for ep in per_episode],
         avg_velocities=[ep["avg_velocity"] for ep in per_episode],
+        max_velocities=[ep["max_velocity"] for ep in per_episode],
+        min_eef_heights=[ep["min_eef_height"] for ep in per_episode],
+        avg_eef_heights=[ep["avg_eef_height"] for ep in per_episode],
         max_eef_heights=[ep["max_eef_height"] for ep in per_episode],
         video_paths=task_result.get("video_paths", []),
     )

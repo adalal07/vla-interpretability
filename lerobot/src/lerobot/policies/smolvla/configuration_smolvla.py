@@ -102,6 +102,12 @@ class SmolVLAConfig(PreTrainedConfig):
     min_period: float = 4e-3  # sensitivity range for the timestep used in sine-cosine positional encoding
     max_period: float = 4.0
 
+    # Automatic activation patching based on semantic value vectors
+    auto_patch_target: str | None = None  # Target word for finding semantically related value vectors (e.g., "slow", "fast")
+    auto_patch_k: int = 20  # Number of nearest neighbor value vectors to patch
+    auto_patch_alpha: float = 5.0  # Alpha value to set for patched activations
+    auto_patch_top_k_tokens: int = 5  # Top-k tokens for semantic embedding computation
+
     def __post_init__(self):
         super().__post_init__()
 

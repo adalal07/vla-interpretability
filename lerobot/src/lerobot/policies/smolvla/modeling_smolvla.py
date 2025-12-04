@@ -74,12 +74,8 @@ from lerobot.utils.utils import get_safe_dtype
 # Each patch replaces f_theta(x)[vector_idx] = alpha, where
 # f_theta(x) = activation(gate_proj(x)) * up_proj(x)
 ACTIVATION_PATCHES = {
-    "vlm": [
-        # {"layer_idx": 0, "vector_indices": [42, 128], "alpha": 0.5},
-    ],
-    "expert": [
-        # {"layer_idx": 15, "vector_indices": list(range(200)), "alpha": 0.0},
-    ],
+    "vlm": [],
+    "expert": [],
 }
 
 # ACTIVATION_PATCHES = {
@@ -286,6 +282,105 @@ def aloha_gripper_from_angular_inv(value):
     return normalize(value, min_val=0.4, max_val=1.5)
 
 
+def extract_vlm_value_vectors(model):
+    """Extract all value vectors from VLM FFN layers.
+
+    Returns: list of (layer_idx, vector_idx, value_vector_tensor)
+    """
+    layers = model.model.vlm_with_expert.get_vlm_model().text_model.layers
+    value_vectors = []
+
+    for layer_idx, layer in enumerate(layers):
+        # down_proj.weight: [hidden_size, intermediate_size]
+        # Each column is a value vector
+        down_proj_weight = layer.mlp.down_proj.weight.data
+
+        for vector_idx in range(down_proj_weight.shape[1]):
+            value_vector = down_proj_weight[:, vector_idx]
+            value_vectors.append((layer_idx, vector_idx, value_vector))
+
+    return value_vectors
+
+
+def compute_semantic_embeddings(
+    value_vectors, embeddings, lm_head, final_norm, top_k=5
+):
+    """Convert value vectors to semantic embeddings via unembedding.
+
+    For each value vector v:
+      1. logits = lm_head(final_norm(v))
+      2. top_tokens = topk(logits, k)
+      3. semantic_emb = sum_i softmax(logits[i]) * embeddings[i]
+
+    Returns:
+        semantic_embeddings: tensor of shape [num_vectors, hidden_dim]
+        top_tokens: tensor of shape [num_vectors, top_k] - token IDs
+        top_probs: tensor of shape [num_vectors, top_k] - probabilities
+    """
+    vectors = torch.stack([v for _, _, v in value_vectors])
+
+    # Project through unembedding
+    normed = final_norm(vectors)
+    logits = lm_head(normed)
+
+    # Get top-k tokens and their probabilities
+    top_logits, top_indices = torch.topk(logits, k=top_k, dim=1)
+    top_probs = F.softmax(top_logits, dim=1)
+
+    # Semantic embedding = weighted average of top token embeddings
+    semantic_embs = []
+    for i in range(len(vectors)):
+        token_embs = embeddings[top_indices[i]]  # [top_k, hidden_dim]
+        weights = top_probs[i]  # [top_k]
+        semantic_emb = (weights[:, None] * token_embs).sum(dim=0)
+        semantic_embs.append(semantic_emb)
+
+    return torch.stack(semantic_embs), top_indices, top_probs
+
+
+def find_nearest_neighbors(
+    target_word, semantic_embeddings, value_vectors, embeddings, tokenizer, k=20
+):
+    """Find k value vectors with semantic embeddings closest to target word.
+
+    Returns: list of (layer_idx, vector_idx, similarity)
+    """
+    # Get target embedding
+    target_token_id = tokenizer.encode(target_word, add_special_tokens=False)[0]
+    target_emb = embeddings[target_token_id]
+
+    # Cosine similarity
+    semantic_norm = F.normalize(semantic_embeddings, dim=1)
+    target_norm = F.normalize(target_emb.unsqueeze(0), dim=1)
+    similarities = (semantic_norm @ target_norm.T).squeeze()
+
+    # Top-k
+    top_sims, top_indices = torch.topk(similarities, k=min(k, len(similarities)))
+
+    results = []
+    for sim, idx in zip(top_sims, top_indices):
+        layer_idx, vector_idx, _ = value_vectors[idx]
+        results.append((layer_idx, vector_idx, sim.item()))
+
+    return results
+
+
+def generate_patches(neighbors, alpha):
+    """Group neighbors by layer and generate patch config."""
+    patches = {}
+    for layer_idx, vector_idx, _ in neighbors:
+        if layer_idx not in patches:
+            patches[layer_idx] = []
+        patches[layer_idx].append(vector_idx)
+
+    patch_list = [
+        {"layer_idx": layer_idx, "vector_indices": indices, "alpha": alpha}
+        for layer_idx, indices in sorted(patches.items())
+    ]
+
+    return patch_list
+
+
 class SmolVLAPolicy(PreTrainedPolicy):
     """Wrapper class around VLAFlowMatching model to train and run inference within LeRobot."""
 
@@ -309,7 +404,75 @@ class SmolVLAPolicy(PreTrainedPolicy):
         self.model = VLAFlowMatching(config)
         self.reset()
 
+        # Compute activation patches dynamically if auto_patch_target is set
+        if config.auto_patch_target is not None:
+            print(f"Computing activation patches for target: '{config.auto_patch_target}'")
+            self._activation_patches = self._compute_auto_patches()
+        else:
+            # Use hardcoded patches from global ACTIVATION_PATCHES
+            self._activation_patches = ACTIVATION_PATCHES
+
         self._register_activation_patches()
+
+    def _compute_auto_patches(self):
+        """Compute activation patches automatically based on semantic value vectors.
+
+        Returns:
+            dict with "vlm" and "expert" patch lists
+        """
+        config = self.config
+
+        # Get components for semantic analysis
+        vlm = self.model.vlm_with_expert.vlm
+        vlm_text = self.model.vlm_with_expert.get_vlm_model().text_model
+        embeddings = vlm_text.embed_tokens.weight.data.to(config.device)
+        lm_head = vlm.lm_head
+        final_norm = vlm_text.norm
+        tokenizer = self.model.vlm_with_expert.processor.tokenizer
+
+        print(f"Extracting value vectors...")
+        value_vectors = extract_vlm_value_vectors(self)
+        print(f"Found {len(value_vectors)} value vectors across {len(set(v[0] for v in value_vectors))} layers")
+
+        print(f"Computing semantic embeddings (top-{config.auto_patch_top_k_tokens} tokens)...")
+        semantic_embeddings, top_tokens, top_probs = compute_semantic_embeddings(
+            value_vectors, embeddings, lm_head, final_norm, top_k=config.auto_patch_top_k_tokens
+        )
+
+        print(f"Finding k={config.auto_patch_k} nearest neighbors to '{config.auto_patch_target}'...")
+        neighbors = find_nearest_neighbors(
+            config.auto_patch_target, semantic_embeddings, value_vectors, embeddings, tokenizer, k=config.auto_patch_k
+        )
+
+        # Print top results
+        print(f"\nTop value vectors for '{config.auto_patch_target}':")
+        for i, (layer_idx, vector_idx, sim) in enumerate(neighbors[:10]):
+            print(f"  {i+1}. Layer {layer_idx}, Vector {vector_idx}: similarity={sim:.4f}")
+
+            # Find this value vector's index to get its top tokens
+            vec_idx = next(
+                j
+                for j, (l, v, _) in enumerate(value_vectors)
+                if l == layer_idx and v == vector_idx
+            )
+            tokens = top_tokens[vec_idx]
+            probs = top_probs[vec_idx]
+
+            print(f"      Top tokens: ", end="")
+            for tok_id, prob in zip(tokens, probs):
+                tok_str = tokenizer.decode([tok_id.item()])
+                print(f"'{tok_str}'({prob:.2f}) ", end="")
+            print()
+
+        # Generate patches
+        vlm_patches = generate_patches(neighbors, config.auto_patch_alpha)
+
+        print(f"\nGenerated {len(vlm_patches)} VLM layer patches with alpha={config.auto_patch_alpha}")
+
+        return {
+            "vlm": vlm_patches,
+            "expert": [],
+        }
 
     def _register_activation_patches(self):
         """Register FFN activation patches on down_proj layers.
@@ -317,7 +480,7 @@ class SmolVLAPolicy(PreTrainedPolicy):
         This method hooks into the down_proj layer of each FFN to intercept and modify
         the intermediate activations f_theta(x) = activation(gate_proj(x)) * up_proj(x).
 
-        Patches are specified in ACTIVATION_PATCHES dict at the top of this file.
+        Patches are specified in self._activation_patches dict.
         """
         self._patch_hooks = []
 
@@ -326,7 +489,7 @@ class SmolVLAPolicy(PreTrainedPolicy):
         expert_layers = self.model.vlm_with_expert.lm_expert.layers
 
         # Register hooks for VLM layers
-        for patch in ACTIVATION_PATCHES.get("vlm", []):
+        for patch in self._activation_patches.get("vlm", []):
             layer_idx = patch["layer_idx"]
             vector_indices = patch["vector_indices"]
             alpha = patch["alpha"]
@@ -336,7 +499,7 @@ class SmolVLAPolicy(PreTrainedPolicy):
             self._patch_hooks.append(hook)
 
         # Register hooks for Expert layers
-        for patch in ACTIVATION_PATCHES.get("expert", []):
+        for patch in self._activation_patches.get("expert", []):
             layer_idx = patch["layer_idx"]
             vector_indices = patch["vector_indices"]
             alpha = patch["alpha"]

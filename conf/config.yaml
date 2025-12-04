@@ -3,10 +3,10 @@ defaults:
 
 model: "adalal/smolvla-libero-64-2.0"
 
-target: up
+target: ???
 k: ???
 alpha: ???
-top_k_tokens: ???
+# top_k_tokens: ???
 
 eval:
   batch_size: 2

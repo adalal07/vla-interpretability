@@ -52,8 +52,10 @@ policy = SmolVLAPolicy.from_pretrained("lerobot/smolvla_base")
 
 """
 
+import builtins
 import math
 from collections import deque
+from pathlib import Path
 from typing import TypedDict
 
 import torch
@@ -61,7 +63,8 @@ import torch.nn.functional as F  # noqa: N812
 from torch import Tensor, nn
 from typing_extensions import Unpack
 
-from lerobot.policies.pretrained import PreTrainedPolicy
+from lerobot.configs.policies import PreTrainedConfig
+from lerobot.policies.pretrained import PreTrainedPolicy, T
 from lerobot.policies.rtc.modeling_rtc import RTCProcessor
 from lerobot.policies.smolvla.configuration_smolvla import SmolVLAConfig
 from lerobot.policies.smolvla.smolvlm_with_expert import SmolVLMWithExpertModel
@@ -76,16 +79,6 @@ class ActionSelectKwargs(TypedDict, total=False):
     inference_delay: int | None
     prev_chunk_left_over: Tensor | None
     execution_horizon: int | None
-
-
-# ============ ACTIVATION PATCHING CONFIG ============
-# Edit these to patch different FFN value vectors
-# Each patch replaces f_theta(x)[vector_idx] = alpha, where
-# f_theta(x) = activation(gate_proj(x)) * up_proj(x)
-ACTIVATION_PATCHES = {
-    "vlm": [],
-    "expert": [],
-}
 
 
 def _create_ffn_patch_hook(vector_indices, alpha):
@@ -325,14 +318,8 @@ class SmolVLAPolicy(PreTrainedPolicy):
         self.model = VLAFlowMatching(config, rtc_processor=self.rtc_processor)
         self.reset()
 
-        # Compute activation patches dynamically if auto_patch_target is set
-        if config.auto_patch_target is not None:
-            print(f"Computing activation patches for target: '{config.auto_patch_target}'")
-            self._activation_patches = self._compute_auto_patches()
-        else:
-            self._activation_patches = ACTIVATION_PATCHES
-
-        self._register_activation_patches()
+        self._activation_patches = None
+        self._patch_hooks: list[torch.utils.hooks.RemovableHandle] = []
 
     def reset(self):
         """This should be called whenever the environment is reset."""
@@ -392,6 +379,9 @@ class SmolVLAPolicy(PreTrainedPolicy):
         """Register FFN activation patches on down_proj layers."""
         self._patch_hooks = []
 
+        if not self._activation_patches:
+            return
+
         vlm_layers = self.model.vlm_with_expert.get_vlm_model().text_model.layers
         expert_layers = self.model.vlm_with_expert.lm_expert.layers
 
@@ -406,6 +396,47 @@ class SmolVLAPolicy(PreTrainedPolicy):
                 _create_ffn_patch_hook(patch["vector_indices"], patch["alpha"])
             )
             self._patch_hooks.append(hook)
+
+    @classmethod
+    def from_pretrained(
+        cls: builtins.type[T],
+        pretrained_name_or_path: str | Path,
+        *,
+        config: PreTrainedConfig | None = None,
+        force_download: bool = False,
+        resume_download: bool | None = None,
+        proxies: dict | None = None,
+        token: str | bool | None = None,
+        cache_dir: str | Path | None = None,
+        local_files_only: bool = False,
+        revision: str | None = None,
+        strict: bool = False,
+        **kwargs,
+    ):
+        policy: T = super().from_pretrained(
+            pretrained_name_or_path,
+            config=config,
+            force_download=force_download,
+            resume_download=resume_download,
+            proxies=proxies,
+            token=token,
+            cache_dir=cache_dir,
+            local_files_only=local_files_only,
+            revision=revision,
+            strict=strict,
+            **kwargs,
+        )
+        # Remove any existing hooks before re-registering
+        for hook in getattr(policy, "_patch_hooks", []):
+            hook.remove()
+        policy._patch_hooks = []
+
+        if policy.config.auto_patch_target is not None:
+            print(f"Computing activation patches for target: '{policy.config.auto_patch_target}'")
+            policy._activation_patches = policy._compute_auto_patches()
+            policy._register_activation_patches()
+
+        return policy
 
     def init_rtc_processor(self):
         """Initialize RTC processor if RTC is enabled in config."""

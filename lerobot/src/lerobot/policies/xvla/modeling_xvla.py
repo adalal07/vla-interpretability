@@ -27,6 +27,7 @@ from pathlib import Path
 import torch
 import torch.nn.functional as F  # noqa: N812
 from torch import Tensor, nn
+from transformers import AutoTokenizer
 
 from lerobot.configs.policies import PreTrainedConfig
 from lerobot.policies.pretrained import PreTrainedPolicy, T
@@ -38,6 +39,123 @@ from .configuration_florence2 import Florence2Config
 from .configuration_xvla import XVLAConfig
 from .modeling_florence2 import Florence2ForConditionalGeneration
 from .soft_transformer import SoftPromptedTransformer
+
+
+def _create_ffn_patch_hook(vector_indices, alpha):
+    """Create a hook for down_proj that patches intermediate activations."""
+
+    def hook(module, input):
+        modified = input[0].clone()
+        for idx in vector_indices:
+            modified[..., idx] = alpha
+        return (modified,)
+
+    return hook
+
+
+def extract_vlm_value_vectors(policy: "XVLAPolicy"):
+    """Extract all value vectors from Florence2 encoder FFN layers."""
+    layers = policy.model.vlm.language_model.model.encoder.layers
+    value_vectors = []
+    for layer_idx, layer in enumerate(layers):
+        down_proj_weight = layer.fc2.weight.data
+        for vector_idx in range(down_proj_weight.shape[1]):
+            value_vector = down_proj_weight[:, vector_idx]
+            value_vectors.append((layer_idx, vector_idx, value_vector))
+    return value_vectors
+
+
+def compute_semantic_embeddings(
+    value_vectors,
+    embeddings,
+    final_bias=None,
+    layer_norms=None,
+    top_k=5,
+    chunk_size=512,
+):
+    """
+    Convert value vectors to semantic embeddings via unembedding.
+
+    If `final_bias` is provided, it is added to logits (to mirror Florence2 forward which applies
+    `final_logits_bias`). Chunking prevents building an enormous (num_vectors x vocab) logits tensor.
+    """
+
+    device = embeddings.device
+    semantic_embs = []
+    all_top_indices = []
+    all_top_probs = []
+
+    with torch.no_grad():
+        for start in range(0, len(value_vectors), chunk_size):
+            chunk = value_vectors[start : start + chunk_size]
+            raw_vectors = torch.stack([v for _, _, v in chunk]).to(device)
+            raw_norm = raw_vectors.norm(dim=1)
+            vectors = raw_vectors
+
+            if layer_norms is not None:
+                ln_states = []
+                for (layer_idx, _, _), vec in zip(chunk, raw_vectors):
+                    weight, bias, eps = layer_norms[layer_idx]
+                    weight = weight.to(device)
+                    bias = bias.to(device)
+                    mean = vec.mean()
+                    var = vec.var(unbiased=False)
+                    normalized = (vec - mean) / torch.sqrt(var + eps)
+                    ln_states.append(weight * normalized + bias)
+                vectors = torch.stack(ln_states, dim=0)
+            vec_norm = vectors.norm(dim=1)
+
+            logits = F.linear(vectors, embeddings)
+            if final_bias is not None:
+                logits = logits + final_bias.to(device)
+
+            top_logits, top_indices = torch.topk(logits, k=top_k, dim=1)
+            top_probs = F.softmax(top_logits, dim=1)
+            top_gap = (top_logits[:, 0] - top_logits[:, -1]).detach()
+
+            token_embs = embeddings[top_indices]
+            semantic_chunk = (top_probs.unsqueeze(-1) * token_embs).sum(dim=1)
+
+            semantic_embs.append(semantic_chunk)
+            all_top_indices.append(top_indices)
+            all_top_probs.append(top_probs)
+
+            del vectors, logits, top_logits, top_indices, top_probs, token_embs, semantic_chunk
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+    semantic_embs = torch.cat(semantic_embs, dim=0)
+    all_top_indices = torch.cat(all_top_indices, dim=0)
+    all_top_probs = torch.cat(all_top_probs, dim=0)
+
+    return semantic_embs, all_top_indices, all_top_probs
+
+
+def find_nearest_neighbors(target_word, semantic_embeddings, value_vectors, embeddings, tokenizer, k=20):
+    """Find k value vectors with semantic embeddings closest to target word."""
+    target_token_id = tokenizer.encode(target_word, add_special_tokens=False)[0]
+    target_emb = embeddings[target_token_id]
+    semantic_norm = F.normalize(semantic_embeddings, dim=1)
+    target_norm = F.normalize(target_emb.unsqueeze(0), dim=1)
+    similarities = (semantic_norm @ target_norm.T).squeeze()
+    top_sims, top_indices = torch.topk(similarities, k=min(k, len(similarities)))
+
+    results = []
+    for sim, idx in zip(top_sims, top_indices):
+        layer_idx, vector_idx, _ = value_vectors[idx]
+        results.append((layer_idx, vector_idx, sim.item()))
+    return results
+
+
+def generate_patches(neighbors, alpha):
+    """Group neighbors by layer and generate patch config."""
+    patches = {}
+    for layer_idx, vector_idx, _ in neighbors:
+        patches.setdefault(layer_idx, []).append(vector_idx)
+    return [
+        {"layer_idx": layer_idx, "vector_indices": indices, "alpha": alpha}
+        for layer_idx, indices in sorted(patches.items())
+    ]
 
 
 class XVLAModel(nn.Module):
@@ -80,6 +198,7 @@ class XVLAModel(nn.Module):
             lm = self.vlm.language_model
             if hasattr(lm, "model") and hasattr(lm.model, "decoder"):
                 del lm.model.decoder
+            # Remove lm_head; activation patching uses encoder embeddings directly.
             if hasattr(lm, "lm_head"):
                 del lm.lm_head
 
@@ -281,10 +400,99 @@ class XVLAPolicy(PreTrainedPolicy):
         self.model = XVLAModel(config=config, florence_config=florence_config, proprio_dim=proprio_dim)
         self.reset()
 
+        self._activation_patches = None
+
     def reset(self) -> None:
         self._queues = {
             ACTION: deque(maxlen=self.config.n_action_steps),
         }
+        self._patch_hooks = []
+
+    def _compute_auto_patches(self):
+        """Compute activation patches automatically based on semantic value vectors."""
+        config = self.config
+        vlm = self.model.vlm.language_model
+
+        # lm_head is stripped in XVLA; use the tied encoder embeddings directly for unembedding.
+        embeddings = vlm.model.encoder.embed_tokens.weight.data.to(config.device)
+        final_bias = getattr(vlm, "final_logits_bias", None)
+        print(
+            f"Auto-patch projection uses final_logits_bias={'yes' if final_bias is not None else 'no'}."
+        )
+        layer_norms = {
+            idx: (
+                layer.final_layer_norm.weight.data.clone(),
+                layer.final_layer_norm.bias.data.clone(),
+                layer.final_layer_norm.eps,
+            )
+            for idx, layer in enumerate(vlm.model.encoder.layers)
+        }
+        tokenizer = self._get_tokenizer()
+
+        print("Extracting value vectors...")
+        value_vectors = extract_vlm_value_vectors(self)
+        print(f"Found {len(value_vectors)} value vectors across {len(set(v[0] for v in value_vectors))} layers")
+
+        print(f"Computing semantic embeddings (top-{config.auto_patch_top_k_tokens} tokens)...")
+        semantic_embeddings, top_tokens, top_probs = compute_semantic_embeddings(
+            value_vectors,
+            embeddings,
+            final_bias,
+            layer_norms,
+            top_k=config.auto_patch_top_k_tokens,
+            chunk_size=512,
+        )
+
+        print(f"Finding k={config.auto_patch_k} nearest neighbors to '{config.auto_patch_target}'...")
+        neighbors = find_nearest_neighbors(
+            config.auto_patch_target,
+            semantic_embeddings,
+            value_vectors,
+            embeddings,
+            tokenizer,
+            k=config.auto_patch_k,
+        )
+
+        print(f"\nTop value vectors for '{config.auto_patch_target}':")
+        for i, (layer_idx, vector_idx, sim) in enumerate(neighbors[:10]):
+            print(f"  {i+1}. Layer {layer_idx}, Vector {vector_idx}: similarity={sim:.4f}")
+            vec_idx = next(j for j, (l, v, _) in enumerate(value_vectors) if l == layer_idx and v == vector_idx)
+            tokens = top_tokens[vec_idx]
+            probs = top_probs[vec_idx]
+            print("      Top tokens: ", end="")
+            for tok_id, prob in zip(tokens, probs):
+                tok_str = tokenizer.decode([tok_id.item()])
+                print(f"'{tok_str}'({prob:.2f}) ", end="")
+            print()
+
+        vlm_patches = generate_patches(neighbors, config.auto_patch_alpha)
+        print(f"\nGenerated {len(vlm_patches)} VLM layer patches with alpha={config.auto_patch_alpha}")
+        return {
+            "vlm": vlm_patches,
+            "transformer": [],
+        }
+
+    def _register_activation_patches(self):
+        """Register FFN activation patches on Florence2 encoder fc2 layers."""
+        vlm_layers = self.model.vlm.language_model.model.encoder.layers
+
+        for patch in self._activation_patches.get("vlm", []):
+            hook = vlm_layers[patch["layer_idx"]].fc2.register_forward_pre_hook(
+                _create_ffn_patch_hook(patch["vector_indices"], patch["alpha"])
+            )
+            self._patch_hooks.append(hook)
+
+        # Placeholder for transformer patches if provided manually
+        if "transformer" in self._activation_patches:
+            transformer_layers = self.model.transformer.blocks
+            for patch in self._activation_patches.get("transformer", []):
+                hook = transformer_layers[patch["layer_idx"]].mlp.fc2.register_forward_pre_hook(
+                    _create_ffn_patch_hook(patch["vector_indices"], patch["alpha"])
+                )
+                self._patch_hooks.append(hook)
+
+    def _get_tokenizer(self):
+        return AutoTokenizer.from_pretrained(self.config.tokenizer_name, padding_side=self.config.tokenizer_padding_side)
 
     def get_optim_params(self) -> dict:
         """Return trainable named parameters for optimization.
@@ -494,6 +702,14 @@ class XVLAPolicy(PreTrainedPolicy):
         instance.model._apply_dtype()
         instance.to(config.device)
         instance.eval()
+        # Compute activation patches now that weights are loaded
+        if instance.config.auto_patch_target is not None:
+            # Remove any existing hooks before re-registering
+            for hook in getattr(instance, "_patch_hooks", []):
+                hook.remove()
+            instance._patch_hooks = []
+            instance._activation_patches = instance._compute_auto_patches()
+            instance._register_activation_patches()
         return instance
 
 

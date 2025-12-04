@@ -82,7 +82,7 @@ from lerobot.envs.utils import (
 from lerobot.policies.factory import make_policy, make_pre_post_processors
 from lerobot.policies.pretrained import PreTrainedPolicy
 from lerobot.processor import PolicyAction, PolicyProcessorPipeline
-from lerobot.utils.constants import ACTION, DONE, OBS_STR, REWARD
+from lerobot.utils.constants import ACTION, DONE, OBS_STATE, OBS_STR, REWARD
 from lerobot.utils.import_utils import register_third_party_plugins
 from lerobot.utils.io_utils import write_video
 from lerobot.utils.random_utils import set_seed
@@ -151,12 +151,52 @@ def rollout(
     all_velocities = []  # track end effector velocities
     all_eef_heights = []  # track end effector heights at each step
 
+    def _get_eef_pos(obs: Any) -> np.ndarray | None:
+        """
+        Extract the end effector position from various observation formats.
+
+        Supports:
+        - Raw env observations with `agent_pos`.
+        - LIBERO observations with nested `robot_state["eef"]["pos"]`.
+        - Already processed observations containing `observation.state` tensors.
+        """
+        if not isinstance(obs, dict):
+            return None
+
+        pos = None
+        if "agent_pos" in obs:
+            pos = obs["agent_pos"]
+        elif isinstance(obs.get("robot_state"), dict):
+            eef_state = obs["robot_state"].get("eef")
+            if isinstance(eef_state, dict) and "pos" in eef_state:
+                pos = eef_state["pos"]
+        elif OBS_STATE in obs:
+            # Handle preprocessed observations that already have tensors
+            pos_tensor = obs[OBS_STATE]
+            if isinstance(pos_tensor, torch.Tensor):
+                pos_np = pos_tensor.detach().cpu().numpy()
+                if pos_np.ndim >= 2 and pos_np.shape[1] >= 3:
+                    return pos_np[:, :3]
+
+        if pos is None:
+            return None
+
+        pos_np = pos if isinstance(pos, np.ndarray) else np.asarray(pos)
+        if pos_np.ndim == 1:
+            pos_np = pos_np[np.newaxis, :]
+
+        if pos_np.shape[1] < 3:
+            return None
+
+        return pos_np[:, :3]
+
     step = 0
     # Keep track of which environments are done.
     done = np.array([False] * env.num_envs)
     # Track previous end effector position for velocity computation
     prev_eef_pos = None
     max_steps = env.call("_max_episode_steps")[0]
+
     progbar = trange(
         max_steps,
         desc=f"Running rollout with at most {max_steps} steps",
@@ -222,26 +262,20 @@ def rollout(
         all_successes.append(torch.tensor(successes))
 
         # Compute end effector velocity and track height (if agent_pos is available)
-        if "agent_pos" in observation:
-            # agent_pos is (batch, state_dim) where first 3 dims are EEF position (x, y, z)
-            current_eef_pos = observation["agent_pos"][:, :3]  # (batch, 3)
+        eef_pos = _get_eef_pos(observation)
 
-            # Track height (z-coordinate is index 2)
-            current_heights = current_eef_pos[:, 2]  # (batch,) - z-coordinate
+        if eef_pos is not None:
+            current_heights = eef_pos[:, 2]  # (batch,) - z-coordinate
             all_eef_heights.append(torch.from_numpy(current_heights))
 
-            if prev_eef_pos is not None:
-                # Velocity = displacement / dt (assuming dt = 1 timestep, approximately 0.05s for most envs)
-                # Compute L2 norm of displacement for scalar velocity
-                displacement = current_eef_pos - prev_eef_pos
+            if prev_eef_pos is not None and prev_eef_pos.shape == eef_pos.shape:
+                displacement = eef_pos - prev_eef_pos
                 velocity = np.linalg.norm(displacement, axis=1)  # (batch,) - speed in m/step
                 all_velocities.append(torch.from_numpy(velocity))
             else:
-                # First step, no previous position to compare
                 all_velocities.append(torch.zeros(env.num_envs))
-            prev_eef_pos = current_eef_pos.copy()
+            prev_eef_pos = eef_pos.copy()
         else:
-            # No agent_pos available (e.g., pixels-only observation)
             all_velocities.append(torch.zeros(env.num_envs))
             all_eef_heights.append(torch.zeros(env.num_envs))
 

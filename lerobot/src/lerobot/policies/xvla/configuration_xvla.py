@@ -68,6 +68,12 @@ class XVLAConfig(PreTrainedConfig):
     tokenizer_padding_side: str = "right"
     pad_language_to: str = "max_length"
 
+    # Automatic activation patching based on semantic value vectors (Florence encoder)
+    auto_patch_target: str | None = None  # Target word for finding semantically related value vectors
+    auto_patch_k: int = 20  # Number of nearest neighbor value vectors to patch
+    auto_patch_alpha: float = 5.0  # Alpha value to set for patched activations
+    auto_patch_top_k_tokens: int = 5  # Top-k tokens for semantic embedding computation
+
     # Transformer head
     hidden_size: int = 1024
     depth: int = 24

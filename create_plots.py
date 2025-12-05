@@ -68,12 +68,12 @@ for subdir in os.listdir(root_dir):
 
             plt.grid(True)
             plt.tight_layout()
-            plt.savefig(f"plots/{metric}_target={target}.png")
+            plt.savefig(f"plots/smolvla/{metric}_target={target}.png")
             plt.close()
 
-    word_averages = (
+    word_stats = (
         data.groupby("target")[metrics_to_plot]
-        .mean()
+        .agg(['mean', 'std'])
         .reset_index()
     )
 
@@ -83,12 +83,25 @@ for subdir in os.listdir(root_dir):
         plt.ylabel(metric)
         plt.title(f"Comparison of {metric} across targets")
 
+        means = word_stats[(metric, 'mean')]
+        stds = word_stats[(metric, 'std')]
+        words = word_stats["target"]
+
         plt.bar(
-            word_averages["target"],
-            word_averages[metric]
+            words,
+            means,
+            yerr=stds,
+            capsize=5,
         )
 
+        y_min = (means - stds).min() * 0.95 if not ((means - stds).min() is pd.NA) else 0
+        y_max = (means + stds).max() * 1.05 if not ((means + stds).max() is pd.NA) else 1
+        if pd.isna(y_min) or pd.isna(y_max) or y_min >= y_max:
+            y_min, y_max = 0, 1   
+        plt.ylim(y_min, y_max)
+
+        plt.xticks(rotation=45)
         plt.grid(True)
         plt.tight_layout()
-        plt.savefig(f"plots/compare_{metric}.png")
+        plt.savefig(f"plots/smolvla/compare_{metric}.png")
         plt.close()

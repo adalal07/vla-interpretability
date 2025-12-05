@@ -51,7 +51,7 @@ def run(cfg: DictConfig):
     # X VLA
     cmd = [
         "lerobot-eval" ,
-        f"--policy.path='lerobot/xvla-libero'" ,
+        f"--policy.path=lerobot/xvla-libero" ,
         f"--policy.n_action_steps=10" ,
         f"--policy.auto_patch_target={cfg.target}" ,
         f"--policy.auto_patch_k={cfg.k}" ,
@@ -60,7 +60,7 @@ def run(cfg: DictConfig):
         f"--env.type=libero" ,
         f"--env.task=libero_object" ,
         f"--env.control_mode=absolute",
-        f"--eval.batch_size=5" ,
+        f"--eval.batch_size=2" ,
         f"--eval.n_episodes=5" ,
         f"--eval.condition_label=xvla-{cfg.target}-{cfg.k}-{cfg.alpha}" ,
         f"--output_dir=./logs/xvla-{cfg.target}-{cfg.k}-{cfg.alpha}"

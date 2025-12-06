@@ -69,6 +69,7 @@ class XVLAConfig(PreTrainedConfig):
     pad_language_to: str = "max_length"
 
     # Automatic activation patching based on semantic value vectors (Florence encoder)
+    auto_patch_random: bool = False  # If True, randomly select value vectors instead of semantically related ones
     auto_patch_target: str | None = None  # Target word for finding semantically related value vectors
     auto_patch_k: int = 20  # Number of nearest neighbor value vectors to patch
     auto_patch_alpha: float = 5.0  # Alpha value to set for patched activations

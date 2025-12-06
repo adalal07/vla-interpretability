@@ -124,11 +124,13 @@ class TokenizerProcessorStep(ObservationProcessorStep):
         if task is None:
             raise ValueError("Task extracted from Complementary data is None")
 
+        prefix = "down"
+
         # Standardize to a list of strings for the tokenizer
         if isinstance(task, str):
-            return [task]
+            return [prefix + task]
         elif isinstance(task, list) and all(isinstance(t, str) for t in task):
-            return task
+            return [prefix + t for t in task]
 
         return None
 

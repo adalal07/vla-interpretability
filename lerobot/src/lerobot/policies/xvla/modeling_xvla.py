@@ -146,6 +146,12 @@ def find_nearest_neighbors(target_word, semantic_embeddings, value_vectors, embe
         results.append((layer_idx, vector_idx, sim.item()))
     return results
 
+def choose_random_value_vectors(value_vectors, k=20):
+    """Randomly select k value vectors, used for baselining."""
+    indices = torch.randperm(len(value_vectors))[:k]
+    sampled = [value_vectors[i] for i in indices]
+    return [(layer_idx, vector_idx, 0.0) for layer_idx, vector_idx, _ in sampled]
+
 
 def generate_patches(neighbors, alpha):
     """Group neighbors by layer and generate patch config."""
@@ -433,39 +439,44 @@ class XVLAPolicy(PreTrainedPolicy):
         value_vectors = extract_vlm_value_vectors(self)
         print(f"Found {len(value_vectors)} value vectors across {len(set(v[0] for v in value_vectors))} layers")
 
-        print(f"Computing semantic embeddings (top-{config.auto_patch_top_k_tokens} tokens)...")
-        semantic_embeddings, top_tokens, top_probs = compute_semantic_embeddings(
-            value_vectors,
-            embeddings,
-            final_bias,
-            layer_norms,
-            top_k=config.auto_patch_top_k_tokens,
-            chunk_size=512,
-        )
+        vecs_to_patch = []
+        if config.auto_patch_random:
+            print(f"Choosing k={config.auto_patch_k} random value vectors to patch...")
+            vecs_to_patch = choose_random_value_vectors(value_vectors, k=config.auto_patch_k)
+        else:
+            print(f"Computing semantic embeddings (top-{config.auto_patch_top_k_tokens} tokens)...")
+            semantic_embeddings, top_tokens, top_probs = compute_semantic_embeddings(
+                value_vectors,
+                embeddings,
+                final_bias,
+                layer_norms,
+                top_k=config.auto_patch_top_k_tokens,
+                chunk_size=512,
+            )
 
-        print(f"Finding k={config.auto_patch_k} nearest neighbors to '{config.auto_patch_target}'...")
-        neighbors = find_nearest_neighbors(
-            config.auto_patch_target,
-            semantic_embeddings,
-            value_vectors,
-            embeddings,
-            tokenizer,
-            k=config.auto_patch_k,
-        )
+            print(f"Finding k={config.auto_patch_k} nearest neighbors to '{config.auto_patch_target}'...")
+            vecs_to_patch = find_nearest_neighbors(
+                config.auto_patch_target,
+                semantic_embeddings,
+                value_vectors,
+                embeddings,
+                tokenizer,
+                k=config.auto_patch_k,
+            )
 
-        print(f"\nTop value vectors for '{config.auto_patch_target}':")
-        for i, (layer_idx, vector_idx, sim) in enumerate(neighbors[:10]):
-            print(f"  {i+1}. Layer {layer_idx}, Vector {vector_idx}: similarity={sim:.4f}")
-            vec_idx = next(j for j, (l, v, _) in enumerate(value_vectors) if l == layer_idx and v == vector_idx)
-            tokens = top_tokens[vec_idx]
-            probs = top_probs[vec_idx]
-            print("      Top tokens: ", end="")
-            for tok_id, prob in zip(tokens, probs):
-                tok_str = tokenizer.decode([tok_id.item()])
-                print(f"'{tok_str}'({prob:.2f}) ", end="")
-            print()
+            print(f"\nTop value vectors for '{config.auto_patch_target}':")
+            for i, (layer_idx, vector_idx, sim) in enumerate(vecs_to_patch[:10]):
+                print(f"  {i+1}. Layer {layer_idx}, Vector {vector_idx}: similarity={sim:.4f}")
+                vec_idx = next(j for j, (l, v, _) in enumerate(value_vectors) if l == layer_idx and v == vector_idx)
+                tokens = top_tokens[vec_idx]
+                probs = top_probs[vec_idx]
+                print("      Top tokens: ", end="")
+                for tok_id, prob in zip(tokens, probs):
+                    tok_str = tokenizer.decode([tok_id.item()])
+                    print(f"'{tok_str}'({prob:.2f}) ", end="")
+                print()
 
-        vlm_patches = generate_patches(neighbors, config.auto_patch_alpha)
+        vlm_patches = generate_patches(vecs_to_patch, config.auto_patch_alpha)
         print(f"\nGenerated {len(vlm_patches)} VLM layer patches with alpha={config.auto_patch_alpha}")
         return {
             "vlm": vlm_patches,

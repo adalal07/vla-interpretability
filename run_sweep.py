@@ -51,15 +51,15 @@ def run(cfg: DictConfig):
     # SMOL VLA
     cmd = [
         "lerobot-eval" ,
-        f"--policy.path={cfg.policy.path}" ,
-        f"--policy.n_action_steps={cfg.policy.n_action_steps}" ,
+        f"--policy.path={cfg.model}" ,
+        f"--policy.n_action_steps=10" ,
         f"--policy.auto_patch_target={cfg.target}" ,
         f"--policy.auto_patch_k={cfg.k}" ,
         f"--policy.auto_patch_alpha={cfg.alpha}" ,
         f"--policy.auto_patch_top_k_tokens=5" ,
         f"--env.type=libero" ,
         f"--env.task=libero_object" ,
-        f"--eval.batch_size=5" ,
+        f"--eval.batch_size=2" ,
         f"--eval.n_episodes=5" ,
         f"--eval.condition_label=smolvla-{cfg.target}-{cfg.k}-{cfg.alpha}" ,
         f"--output_dir=./logs/smolvla-{cfg.target}-{cfg.k}-{cfg.alpha}"

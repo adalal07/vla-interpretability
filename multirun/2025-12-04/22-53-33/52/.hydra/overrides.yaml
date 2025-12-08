@@ -1,0 +1,4 @@
+- target=slow
+- k=10
+- alpha=6
+- sweep_name=libero_valuevec_sweep

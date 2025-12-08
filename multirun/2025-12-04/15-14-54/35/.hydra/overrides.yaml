@@ -1,0 +1,4 @@
+- target=fast
+- k=10
+- alpha=2
+- sweep_name=libero_valuevec_sweep

@@ -1,0 +1,985 @@
+{
+  "per_task": [
+    {
+      "task_group": "libero_object",
+      "task_id": 0,
+      "metrics": {
+        "sum_rewards": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "max_rewards": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "successes": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "episode_lengths": [
+          148,
+          148,
+          150,
+          171,
+          171
+        ],
+        "min_velocities": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "avg_velocities": [
+          0.007802396177046852,
+          0.007790444946897091,
+          0.009702143855757756,
+          0.006922302364913296,
+          0.006915957093392254
+        ],
+        "max_velocities": [
+          0.011767802238031193,
+          0.011541196726670585,
+          0.3033488797515618,
+          0.011049581183425238,
+          0.011215578915897003
+        ],
+        "min_eef_heights": [
+          0.04310633779325444,
+          0.043873078545705976,
+          0.04286910400397349,
+          0.04405910042508239,
+          0.0443279348963109
+        ],
+        "avg_eef_heights": [
+          0.20737698398807508,
+          0.20548425347804597,
+          0.2106147416233725,
+          0.19989006652176147,
+          0.20059919288898112
+        ],
+        "max_eef_heights": [
+          0.2681791460984098,
+          0.26663794463999674,
+          0.2793369248581425,
+          0.2686406476777148,
+          0.27080946558077246
+        ],
+        "video_paths": [
+          "logs/xvla-down-10-10/videos/libero_object_0/eval_episode_0.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_0/eval_episode_1.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_0/eval_episode_2.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_0/eval_episode_3.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_0/eval_episode_4.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_0/eval_episode_5.mp4"
+        ]
+      }
+    },
+    {
+      "task_group": "libero_object",
+      "task_id": 1,
+      "metrics": {
+        "sum_rewards": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "max_rewards": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "successes": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "episode_lengths": [
+          138,
+          131,
+          133,
+          133,
+          134
+        ],
+        "min_velocities": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "avg_velocities": [
+          0.007142793224991884,
+          0.00941518745095039,
+          0.00689551995993292,
+          0.007107742155012686,
+          0.009247103250019525
+        ],
+        "max_velocities": [
+          0.011759389784959865,
+          0.2994239434462756,
+          0.012016118057921651,
+          0.012660096528567333,
+          0.2939533766591239
+        ],
+        "min_eef_heights": [
+          0.008669192847608684,
+          0.008562756171865152,
+          0.009176946028593536,
+          0.008935290548681057,
+          0.008946334126635647
+        ],
+        "avg_eef_heights": [
+          0.1651036518184936,
+          0.16726026820133777,
+          0.16346864723895557,
+          0.15740075103679016,
+          0.1567320617775379
+        ],
+        "max_eef_heights": [
+          0.2599904159951997,
+          0.26127947572964005,
+          0.260673083373477,
+          0.26074434832858023,
+          0.26127947572964005
+        ],
+        "video_paths": [
+          "logs/xvla-down-10-10/videos/libero_object_1/eval_episode_0.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_1/eval_episode_1.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_1/eval_episode_2.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_1/eval_episode_3.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_1/eval_episode_4.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_1/eval_episode_5.mp4"
+        ]
+      }
+    },
+    {
+      "task_group": "libero_object",
+      "task_id": 2,
+      "metrics": {
+        "sum_rewards": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "max_rewards": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "successes": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "episode_lengths": [
+          126,
+          133,
+          136,
+          120,
+          131
+        ],
+        "min_velocities": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "avg_velocities": [
+          0.009372811346596765,
+          0.00679914982828328,
+          0.006712229280966784,
+          0.009611661084121618,
+          0.006791859965761472
+        ],
+        "max_velocities": [
+          0.3029643109697743,
+          0.011767916360740416,
+          0.01159880357195472,
+          0.2863076341707421,
+          0.012010506335386655
+        ],
+        "min_eef_heights": [
+          0.11215503906613813,
+          0.11273003441520184,
+          0.1128245115742518,
+          0.113453414133042,
+          0.11252796134352014
+        ],
+        "avg_eef_heights": [
+          0.22648309140430214,
+          0.2297281681932911,
+          0.23030590647733626,
+          0.23025634127883154,
+          0.23338084054427874
+        ],
+        "max_eef_heights": [
+          0.29963519342076395,
+          0.3189895129238989,
+          0.32647276572551176,
+          0.3036275194070391,
+          0.3247542876935281
+        ],
+        "video_paths": [
+          "logs/xvla-down-10-10/videos/libero_object_2/eval_episode_0.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_2/eval_episode_1.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_2/eval_episode_2.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_2/eval_episode_3.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_2/eval_episode_4.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_2/eval_episode_5.mp4"
+        ]
+      }
+    },
+    {
+      "task_group": "libero_object",
+      "task_id": 3,
+      "metrics": {
+        "sum_rewards": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "max_rewards": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "successes": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "episode_lengths": [
+          134,
+          138,
+          188,
+          140,
+          132
+        ],
+        "min_velocities": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "avg_velocities": [
+          0.009178640837856186,
+          0.006679629828041851,
+          0.006207283643951298,
+          0.00870477149307488,
+          0.009262685367488194
+        ],
+        "max_velocities": [
+          0.30800485975045655,
+          0.011120183332028407,
+          0.011228501895837482,
+          0.2929222408344325,
+          0.297896193850935
+        ],
+        "min_eef_heights": [
+          0.06971337020497571,
+          0.06631010748122747,
+          0.06772235735340769,
+          0.07566898494117845,
+          0.07380552055126
+        ],
+        "avg_eef_heights": [
+          0.20303609850696128,
+          0.19598862475509043,
+          0.17957791483790622,
+          0.20555463376841507,
+          0.2074921301082304
+        ],
+        "max_eef_heights": [
+          0.2872746503113701,
+          0.27422511947385464,
+          0.2784373734391331,
+          0.2868656495135597,
+          0.29228686719759095
+        ],
+        "video_paths": [
+          "logs/xvla-down-10-10/videos/libero_object_3/eval_episode_0.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_3/eval_episode_1.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_3/eval_episode_2.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_3/eval_episode_3.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_3/eval_episode_4.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_3/eval_episode_5.mp4"
+        ]
+      }
+    },
+    {
+      "task_group": "libero_object",
+      "task_id": 4,
+      "metrics": {
+        "sum_rewards": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "max_rewards": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "successes": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "episode_lengths": [
+          159,
+          160,
+          162,
+          149,
+          158
+        ],
+        "min_velocities": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "avg_velocities": [
+          0.00825410719360879,
+          0.006571011647342943,
+          0.006640811875995874,
+          0.009231793421172748,
+          0.006821568935600555
+        ],
+        "max_velocities": [
+          0.29603650835802375,
+          0.01098074793160179,
+          0.011511175879209922,
+          0.2947376346336509,
+          0.011764033055519211
+        ],
+        "min_eef_heights": [
+          0.11326511511379614,
+          0.11419506703682719,
+          0.112645321779577,
+          0.11056837693039033,
+          0.11138006802858387
+        ],
+        "avg_eef_heights": [
+          0.22808601002753326,
+          0.2366122311905589,
+          0.2343284546817631,
+          0.24529242093906514,
+          0.23588441709245817
+        ],
+        "max_eef_heights": [
+          0.28806559461607373,
+          0.3052225193698772,
+          0.30950666635462826,
+          0.3296429653003256,
+          0.30207453350668834
+        ],
+        "video_paths": [
+          "logs/xvla-down-10-10/videos/libero_object_4/eval_episode_0.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_4/eval_episode_1.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_4/eval_episode_2.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_4/eval_episode_3.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_4/eval_episode_4.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_4/eval_episode_5.mp4"
+        ]
+      }
+    },
+    {
+      "task_group": "libero_object",
+      "task_id": 5,
+      "metrics": {
+        "sum_rewards": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "max_rewards": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "successes": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "episode_lengths": [
+          133,
+          125,
+          140,
+          141,
+          138
+        ],
+        "min_velocities": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "avg_velocities": [
+          0.006851681106749908,
+          0.009680704743908726,
+          0.008413508220246647,
+          0.007068007355599922,
+          0.006966626494608401
+        ],
+        "max_velocities": [
+          0.011221635509437618,
+          0.3141991349396948,
+          0.29070588160762284,
+          0.011362191364798909,
+          0.01100994406827992
+        ],
+        "min_eef_heights": [
+          0.0551020616047089,
+          0.047511795037241025,
+          0.0437086822186418,
+          0.04650414407803452,
+          0.04667510928181123
+        ],
+        "avg_eef_heights": [
+          0.18078925071599164,
+          0.17776909526653445,
+          0.17709597123697163,
+          0.1844428590100239,
+          0.17976510756073782
+        ],
+        "max_eef_heights": [
+          0.2605456321898081,
+          0.26127947572964005,
+          0.26127947572964005,
+          0.26039382661269683,
+          0.2605195429313238
+        ],
+        "video_paths": [
+          "logs/xvla-down-10-10/videos/libero_object_5/eval_episode_0.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_5/eval_episode_1.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_5/eval_episode_2.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_5/eval_episode_3.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_5/eval_episode_4.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_5/eval_episode_5.mp4"
+        ]
+      }
+    },
+    {
+      "task_group": "libero_object",
+      "task_id": 6,
+      "metrics": {
+        "sum_rewards": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "max_rewards": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "successes": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "episode_lengths": [
+          160,
+          173,
+          161,
+          147,
+          159
+        ],
+        "min_velocities": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "avg_velocities": [
+          0.009354946426509974,
+          0.0071712958413109274,
+          0.007547254166483821,
+          0.009778274938791891,
+          0.009309980432474474
+        ],
+        "max_velocities": [
+          0.31060820605271106,
+          0.01238902854869824,
+          0.012704179324978568,
+          0.30385117590861555,
+          0.30601614864357823
+        ],
+        "min_eef_heights": [
+          0.00846001353982695,
+          0.009155720714429813,
+          0.009295470802994227,
+          0.010743553010547843,
+          0.009555536561749858
+        ],
+        "avg_eef_heights": [
+          0.1897507092220302,
+          0.1815564891161097,
+          0.18967574099180995,
+          0.18077474755652287,
+          0.1845094975255146
+        ],
+        "max_eef_heights": [
+          0.26127947572964005,
+          0.2604572264478006,
+          0.27488022645580407,
+          0.26127947572964005,
+          0.26622319550745116
+        ],
+        "video_paths": [
+          "logs/xvla-down-10-10/videos/libero_object_6/eval_episode_0.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_6/eval_episode_1.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_6/eval_episode_2.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_6/eval_episode_3.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_6/eval_episode_4.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_6/eval_episode_5.mp4"
+        ]
+      }
+    },
+    {
+      "task_group": "libero_object",
+      "task_id": 7,
+      "metrics": {
+        "sum_rewards": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "max_rewards": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "successes": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "episode_lengths": [
+          181,
+          142,
+          137,
+          143,
+          157
+        ],
+        "min_velocities": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "avg_velocities": [
+          0.0071086089287627635,
+          0.009826579424217939,
+          0.009869234327209488,
+          0.0075283225936501824,
+          0.008822275730354823
+        ],
+        "max_velocities": [
+          0.011965448055058739,
+          0.32508098582831324,
+          0.3140980360318557,
+          0.012323147209849701,
+          0.31505458266919445
+        ],
+        "min_eef_heights": [
+          0.09609378992643426,
+          0.0907347969397036,
+          0.09057547741286064,
+          0.09357921003464995,
+          0.09433899960296792
+        ],
+        "avg_eef_heights": [
+          0.2104616882413052,
+          0.2236119361035095,
+          0.22041643642010392,
+          0.2239940400221507,
+          0.2196095311210647
+        ],
+        "max_eef_heights": [
+          0.29393969647027207,
+          0.2845191112936463,
+          0.2839667736447652,
+          0.2852092700792851,
+          0.2784904413395225
+        ],
+        "video_paths": [
+          "logs/xvla-down-10-10/videos/libero_object_7/eval_episode_0.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_7/eval_episode_1.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_7/eval_episode_2.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_7/eval_episode_3.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_7/eval_episode_4.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_7/eval_episode_5.mp4"
+        ]
+      }
+    },
+    {
+      "task_group": "libero_object",
+      "task_id": 8,
+      "metrics": {
+        "sum_rewards": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "max_rewards": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "successes": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "episode_lengths": [
+          173,
+          171,
+          172,
+          164,
+          168
+        ],
+        "min_velocities": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "avg_velocities": [
+          0.007158647311572152,
+          0.008847416767622662,
+          0.00730765223179869,
+          0.009357758057393233,
+          0.00730485658911476
+        ],
+        "max_velocities": [
+          0.011651988183735047,
+          0.2908223109777772,
+          0.011740300235870386,
+          0.3057487313348013,
+          0.01199573190749539
+        ],
+        "min_eef_heights": [
+          0.010500978515102566,
+          0.01166202703327869,
+          0.010239371996630081,
+          0.008671632916739808,
+          0.009508185875064662
+        ],
+        "avg_eef_heights": [
+          0.19499207008952352,
+          0.18684340201773803,
+          0.19596047952019252,
+          0.19971380463724764,
+          0.18605933533317
+        ],
+        "max_eef_heights": [
+          0.2861831138867229,
+          0.2627167492327545,
+          0.2625498527382398,
+          0.2681545538832463,
+          0.26020778698497965
+        ],
+        "video_paths": [
+          "logs/xvla-down-10-10/videos/libero_object_8/eval_episode_0.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_8/eval_episode_1.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_8/eval_episode_2.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_8/eval_episode_3.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_8/eval_episode_4.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_8/eval_episode_5.mp4"
+        ]
+      }
+    },
+    {
+      "task_group": "libero_object",
+      "task_id": 9,
+      "metrics": {
+        "sum_rewards": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "max_rewards": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "successes": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "episode_lengths": [
+          134,
+          137,
+          128,
+          141,
+          125
+        ],
+        "min_velocities": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "avg_velocities": [
+          0.008999776343617025,
+          0.006591222809151784,
+          0.0094079485606179,
+          0.0066695295130909105,
+          0.007268698366146736
+        ],
+        "max_velocities": [
+          0.2898432610968686,
+          0.01101510630994898,
+          0.30828088643018825,
+          0.01221804701459695,
+          0.011423055672145873
+        ],
+        "min_eef_heights": [
+          0.09683215696106412,
+          0.09699262699171364,
+          0.09731498033075972,
+          0.09762484305921541,
+          0.09695296377114272
+        ],
+        "avg_eef_heights": [
+          0.22059686103769366,
+          0.21546930907185857,
+          0.21538631069599104,
+          0.22143834249189792,
+          0.21940836705888164
+        ],
+        "max_eef_heights": [
+          0.27957791458939757,
+          0.2812618813598626,
+          0.27357659736474316,
+          0.31160141339382613,
+          0.2728014658580225
+        ],
+        "video_paths": [
+          "logs/xvla-down-10-10/videos/libero_object_9/eval_episode_0.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_9/eval_episode_1.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_9/eval_episode_2.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_9/eval_episode_3.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_9/eval_episode_4.mp4",
+          "logs/xvla-down-10-10/videos/libero_object_9/eval_episode_5.mp4"
+        ]
+      }
+    }
+  ],
+  "per_group": {
+    "libero_object": {
+      "avg_sum_reward": 1.0,
+      "avg_max_reward": 1.0,
+      "pc_success": 100.0,
+      "n_episodes": 50,
+      "video_paths": [
+        "logs/xvla-down-10-10/videos/libero_object_0/eval_episode_0.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_0/eval_episode_1.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_0/eval_episode_2.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_0/eval_episode_3.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_0/eval_episode_4.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_0/eval_episode_5.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_1/eval_episode_0.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_1/eval_episode_1.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_1/eval_episode_2.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_1/eval_episode_3.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_1/eval_episode_4.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_1/eval_episode_5.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_2/eval_episode_0.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_2/eval_episode_1.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_2/eval_episode_2.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_2/eval_episode_3.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_2/eval_episode_4.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_2/eval_episode_5.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_3/eval_episode_0.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_3/eval_episode_1.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_3/eval_episode_2.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_3/eval_episode_3.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_3/eval_episode_4.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_3/eval_episode_5.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_4/eval_episode_0.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_4/eval_episode_1.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_4/eval_episode_2.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_4/eval_episode_3.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_4/eval_episode_4.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_4/eval_episode_5.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_5/eval_episode_0.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_5/eval_episode_1.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_5/eval_episode_2.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_5/eval_episode_3.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_5/eval_episode_4.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_5/eval_episode_5.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_6/eval_episode_0.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_6/eval_episode_1.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_6/eval_episode_2.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_6/eval_episode_3.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_6/eval_episode_4.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_6/eval_episode_5.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_7/eval_episode_0.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_7/eval_episode_1.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_7/eval_episode_2.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_7/eval_episode_3.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_7/eval_episode_4.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_7/eval_episode_5.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_8/eval_episode_0.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_8/eval_episode_1.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_8/eval_episode_2.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_8/eval_episode_3.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_8/eval_episode_4.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_8/eval_episode_5.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_9/eval_episode_0.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_9/eval_episode_1.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_9/eval_episode_2.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_9/eval_episode_3.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_9/eval_episode_4.mp4",
+        "logs/xvla-down-10-10/videos/libero_object_9/eval_episode_5.mp4"
+      ]
+    }
+  },
+  "overall": {
+    "avg_sum_reward": 1.0,
+    "avg_max_reward": 1.0,
+    "pc_success": 100.0,
+    "n_episodes": 50,
+    "eval_s": 233.29118394851685,
+    "eval_ep_s": 4.665823683738709,
+    "video_paths": [
+      "logs/xvla-down-10-10/videos/libero_object_0/eval_episode_0.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_0/eval_episode_1.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_0/eval_episode_2.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_0/eval_episode_3.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_0/eval_episode_4.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_0/eval_episode_5.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_1/eval_episode_0.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_1/eval_episode_1.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_1/eval_episode_2.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_1/eval_episode_3.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_1/eval_episode_4.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_1/eval_episode_5.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_2/eval_episode_0.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_2/eval_episode_1.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_2/eval_episode_2.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_2/eval_episode_3.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_2/eval_episode_4.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_2/eval_episode_5.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_3/eval_episode_0.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_3/eval_episode_1.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_3/eval_episode_2.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_3/eval_episode_3.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_3/eval_episode_4.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_3/eval_episode_5.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_4/eval_episode_0.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_4/eval_episode_1.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_4/eval_episode_2.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_4/eval_episode_3.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_4/eval_episode_4.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_4/eval_episode_5.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_5/eval_episode_0.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_5/eval_episode_1.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_5/eval_episode_2.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_5/eval_episode_3.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_5/eval_episode_4.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_5/eval_episode_5.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_6/eval_episode_0.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_6/eval_episode_1.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_6/eval_episode_2.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_6/eval_episode_3.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_6/eval_episode_4.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_6/eval_episode_5.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_7/eval_episode_0.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_7/eval_episode_1.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_7/eval_episode_2.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_7/eval_episode_3.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_7/eval_episode_4.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_7/eval_episode_5.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_8/eval_episode_0.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_8/eval_episode_1.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_8/eval_episode_2.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_8/eval_episode_3.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_8/eval_episode_4.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_8/eval_episode_5.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_9/eval_episode_0.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_9/eval_episode_1.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_9/eval_episode_2.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_9/eval_episode_3.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_9/eval_episode_4.mp4",
+      "logs/xvla-down-10-10/videos/libero_object_9/eval_episode_5.mp4"
+    ]
+  },
+  "condition_label": "xvla-down-10-10"
+}

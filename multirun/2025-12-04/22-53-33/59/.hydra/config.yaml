@@ -1,0 +1,5 @@
+model: adalal/smolvla-libero-64-2.0
+target: slow
+k: 20
+alpha: 10
+sweep_name: libero_valuevec_sweep

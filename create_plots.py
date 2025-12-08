@@ -63,13 +63,45 @@ for subdir in os.listdir(root_dir):
             plt.ylabel(metric)
             plt.title(f"{metric} for target={target}")
 
-            plt.plot(pivot.index, pivot.values)
-            plt.legend([f"alpha={col}" for col in pivot.columns])
+            for col in pivot.columns:
+                y = pivot[col].values
+                x = pivot.index.values
 
+                std = y.std()
+                se = std / (len(y) ** 0.5)
+
+                plt.plot(x, y, label=f"alpha={col}")
+                plt.fill_between(x, y, x - se, y + se, alpha=0.2)
+
+            plt.legend()
             plt.grid(True)
             plt.tight_layout()
             plt.savefig(f"plots/smolvla/{metric}_target={target}.png")
             plt.close()
+
+        #########################
+        #       OLD CODE
+        #########################
+        # for metric in metrics_to_plot:
+        #     plt.figure()
+        #     pivot = subdf.pivot_table(
+        #         index="k", columns="alpha", values=metric
+        #     )
+
+        #     plt.xlabel("k")
+        #     plt.ylabel(metric)
+        #     plt.title(f"{metric} for target={target}")
+
+        #     plt.plot(pivot.index, pivot.values)
+        #     plt.legend([f"alpha={col}" for col in pivot.columns])
+
+        #     plt.grid(True)
+        #     plt.tight_layout()
+        #     plt.savefig(f"plots/smolvla/{metric}_target={target}.png")
+        #     plt.close()
+        #########################
+        #       OLD CODE
+        #########################
 
     word_stats = (
         data.groupby("target")[metrics_to_plot]
